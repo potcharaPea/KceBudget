@@ -29,6 +29,7 @@ let settings = {};      // master data dropdown
 let selectedWbs = null; // งานที่เลือกดูอยู่ (WBS)
 let search = '';        // คำค้นในหน้าเลือกแฟ้ม
 let dashMode = 'sum';   // โหมด Dashboard: sum | month | year
+let flashCutKey = null; // key ก้อนงบที่เพิ่งตัด → ไฮไลต์แถวชั่วคราวหลัง re-render
 
 // ---------- สลับ panel ใน main + เมนู sidebar ----------
 function showPanel(name) {
@@ -436,6 +437,7 @@ function renderDetail() {
   const j = jobStats().find((x) => x.wbs === selectedWbs);
   const pct = j.alloc > 0 ? Math.min(100, (j.paid / j.alloc) * 100) : 0;
   const gc = j.bal < 0 ? 'var(--err)' : 'var(--primary)';
+  const fk = flashCutKey; flashCutKey = null; // ก้อนที่เพิ่งตัด → ไฮไลต์ครั้งเดียว
 
   // ปุ่มย้อนกลับ + หัวเรื่อง + เกจ %เบิกแล้ว
   let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button>
@@ -468,7 +470,8 @@ function renderDetail() {
     for (const b of byNet[grp]) {
       const i = budgets.indexOf(b);
       const canCut = b.balance > 0;
-      html += `<tr><td>${esc(b.category)}</td><td class="act">${esc(b.act)}</td>
+      const flashCls = b.key === fk ? ' class="row-flash"' : '';
+      html += `<tr${flashCls}><td>${esc(b.category)}</td><td class="act">${esc(b.act)}</td>
         <td class="num">${fmt(b.allocation)}</td><td class="num">${fmt(b.paid)}</td>
         <td class="num ${b.balance < 0 ? 'err' : ''}">${fmt(b.balance)}</td>
         <td><div class="row-actions"><button class="btn sec" data-sum="${i}">สรุป/งวด</button>
@@ -564,15 +567,28 @@ async function makePdf(btn) {
   btn.disabled = true; btn.innerHTML = spin + 'กำลังออก…';
   try {
     const r = await callApi('makePdf', { slipNo: btn.dataset.pdf });
-    const a = document.createElement('a');
-    a.href = 'data:application/pdf;base64,' + r.b64;
-    a.download = r.filename;
-    a.click();
-    btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
+    const bytes = Uint8Array.from(atob(r.b64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const file = new File([blob], r.filename, { type: 'application/pdf' });
+    // มือถือ: เปิด share sheet (เซฟลงเครื่อง/แชร์เข้าไลน์ได้); เดสก์ท็อป/ไม่รองรับ: ดาวน์โหลด
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: r.filename }); }
+      catch (e) { if (e.name !== 'AbortError') downloadBlob(blob, r.filename); } // ยกเลิก = ไม่ทำอะไร
+    } else {
+      downloadBlob(blob, r.filename);
+    }
   } catch (err) {
-    btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
     alert('ออก PDF ไม่สำเร็จ: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
   }
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 // ---------- ฟอร์มเปิดใบตัด (modal) ----------
@@ -656,10 +672,11 @@ async function submitSlip(b) {
       workName: val('f-workName'), requester: val('f-requester'), position: val('f-position'),
       driver: val('f-driver'), contract: val('f-contract'), slipDate: val('f-slipDate'), ref: val('f-ref'),
     });
+    flashCutKey = b.key; // ให้แถวที่เพิ่งตัดไฮไลต์หลัง re-render
     closeModal();
+    await loadBudgets(); // รอ re-render เสร็จ แถวถึงไฮไลต์ + flash ไม่โดนล้าง
     $('detailOut').insertAdjacentHTML('afterbegin',
       `<div class="flash ok">${ic('check')}บันทึกใบตัดเลขที่ ${r.slipNo} — คงเหลือใหม่ ${fmt(r.balance)}</div>`);
-    loadBudgets();
   } catch (err) {
     // server เป็นคนตัดสิน (กันเบิกเกิน/แข่งกันเบิก) — โชว์เหตุผลจาก server
     $('slipErr').textContent = err.message;
