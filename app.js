@@ -9,6 +9,20 @@ const $ = (id) => document.getElementById(id);
 const fmt = (n) => Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// ไอคอน SVG line (stroke currentColor) แทน emoji — กลมกลืนทั้งแอป
+const ICONS = {
+  upload: '<path d="M12 15.5V4M8 7.5 12 3.5l4 4"/><path d="M4.5 16.5v1.5A2 2 0 0 0 6.5 20h11a2 2 0 0 0 2-2v-1.5"/>',
+  download: '<path d="M12 4v11M8 11.5l4 4 4-4"/><path d="M4.5 17.5v1A2 2 0 0 0 6.5 20.5h11a2 2 0 0 0 2-2v-1"/>',
+  trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  alert: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+};
+const ic = (name) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+const spin = '<span class="spinner"></span>';
+
 let parsed = null;      // ผลอ่านไฟล์ล่าสุด {wbs, networks, fileName}
 let budgets = [];       // ก้อนงบจาก server
 let settings = {};      // master data dropdown
@@ -56,7 +70,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').ca
 $('credit').addEventListener('click', () => {
   $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
     <div style="text-align:center;padding:10px 0">
-      <div style="font-size:44px">👨‍💻</div>
+      <div style="color:var(--primary)"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></div>
       <div style="font-size:18px;font-weight:600;margin-top:8px">นายพชระ ปรีดากรณ์</div>
       <div class="sub" style="margin-top:4px">วศก.ผปร. กฟส.คช.</div>
     </div>
@@ -86,7 +100,7 @@ async function extractItems(buf) {
 }
 
 async function handleFile(file) {
-  $('importOut').innerHTML = '<div class="sub">⏳ กำลังอ่านไฟล์…</div>';
+  $('importOut').innerHTML = '<div class="sub">' + spin + 'กำลังอ่านไฟล์…</div>';
   try {
     const items = await extractItems(await file.arrayBuffer());
     parsed = parseZpsr018(items);
@@ -111,13 +125,13 @@ function renderParsed() {
       <table><thead><tr><th>หมวดงบ</th><th class="num">ยอดจัดสรร (บาท)</th><th>เลขกิจกรรม</th><th>เปิดใบตัดงบ</th></tr></thead><tbody>`;
     for (const c of n.categories) {
       html += `<tr class="${c.openSlip ? '' : 'skip'}"><td>${esc(c.name)}</td><td class="num">${fmt(c.value)}</td>
-        <td class="act">${c.act}</td><td>${c.openSlip ? '<span class="yes">✅</span>' : '<span class="no">—</span>'}</td></tr>`;
+        <td class="act">${c.act}</td><td>${c.openSlip ? `<span class="yes">${ic('check')}</span>` : '<span class="no">—</span>'}</td></tr>`;
     }
     html += `</tbody></table></div>`;
   }
   html += hasBackend()
     ? `<div style="text-align:center;margin-top:24px">
-         <button class="btn" id="importBtn" style="font-size:1.15rem;padding:14px 44px">⬆️ นำงบเข้าระบบ</button></div>
+         <button class="btn" id="importBtn" style="font-size:1.15rem;padding:14px 44px">${ic('upload')}นำงบเข้าระบบ</button></div>
        <div id="importResult"></div>`
     : `<div class="warn" style="margin-top:12px">ℹ️ ยังไม่ได้ตั้งค่า GAS_URL ใน config.js — นำเข้าระบบไม่ได้ (แสดงผลบนจอเท่านั้น)</div>`;
   $('importOut').innerHTML = html;
@@ -142,13 +156,13 @@ function toBudgetRows() {
 
 async function doImport(confirmKeys) {
   const btn = $('importBtn'); if (btn) btn.disabled = true;
-  $('importResult').innerHTML = '<div class="sub">⏳ กำลังนำเข้า…</div>';
+  $('importResult').innerHTML = '<div class="sub">' + spin + 'กำลังนำเข้า…</div>';
   try {
     const workName = $('f-jobName') ? $('f-jobName').value.trim() : '';
     const r = await callApi('importBudget', { fileName: parsed.fileName, workName, budgets: toBudgetRows(), confirmKeys });
-    let html = `<div class="ok">✅ นำเข้าเสร็จ — เพิ่มใหม่ ${r.added.length} | เท่าเดิม(ข้าม) ${r.unchanged} | อัปเดต ${r.updated.length}</div>`;
+    let html = `<div class="ok">${ic('check')}นำเข้าเสร็จ — เพิ่มใหม่ ${r.added.length} | เท่าเดิม(ข้าม) ${r.unchanged} | อัปเดต ${r.updated.length}</div>`;
     if (r.needConfirm && r.needConfirm.length) {
-      html += `<div class="card"><b class="warn">⚠️ พบยอดจัดสรรเปลี่ยน — ต้องยืนยันก่อนทับ</b>`;
+      html += `<div class="card"><b class="warn">${ic('alert')}พบยอดจัดสรรเปลี่ยน — ต้องยืนยันก่อนทับ</b>`;
       for (const c of r.needConfirm) {
         html += `<div class="diff"><label><input type="checkbox" class="cf" value="${esc(c.key)}" checked>
           <span class="mono">${esc(c.key)}</span> : ${fmt(c.oldVal)} → <b>${fmt(c.newVal)}</b>
@@ -263,7 +277,7 @@ function renderFiles() {
 // ---------- หน้า: แฟ้มที่ยังไม่ตัดงบ ----------
 function renderPending() {
   const pend = jobStats().filter((j) => jobStatus(j) === 'none');
-  if (!pend.length) { $('pendingOut').innerHTML = '<div class="list-empty">✅ ทุกแฟ้มเริ่มตัดงบแล้ว</div>'; return; }
+  if (!pend.length) { $('pendingOut').innerHTML = `<div class="list-empty"><span class="ok">${ic('check')}</span> ทุกแฟ้มเริ่มตัดงบแล้ว</div>`; return; }
   $('pendingOut').innerHTML = `<div class="files">${pend.map(fileCard).join('')}</div>`;
   bindFileCards($('pendingOut'));
 }
@@ -425,7 +439,7 @@ function renderDetail() {
 
   // ปุ่มย้อนกลับ + หัวเรื่อง + เกจ %เบิกแล้ว
   let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button>
-    <button class="btn sec" id="delFile" style="margin-left:auto;color:var(--err)">🗑️ ลบแฟ้ม</button></div>
+    <button class="btn sec" id="delFile" style="margin-left:auto;color:var(--err)">${ic('trash')}ลบแฟ้ม</button></div>
   <div class="detail-head">
     <div style="flex:1">
       <div class="dh-kicker">หมายเลขงาน (WBS)</div>
@@ -475,7 +489,7 @@ function renderDetail() {
 function askDeleteFile(wbs) {
   const shown = budgets.filter((b) => b.wbs === wbs);
   const hasCut = shown.some((b) => b.paid > 0);
-  $('modalBox').innerHTML = `<h3>⚠️ ลบแฟ้มงาน</h3>
+  $('modalBox').innerHTML = `<h3><span style="color:var(--err)">${ic('alert')}</span>ลบแฟ้มงาน</h3>
     <div class="sub">หมายเลขงาน (WBS) <b>${esc(wbs)}</b></div>
     <div class="warn" style="margin:12px 0">จะลบก้อนงบ ${shown.length} หมวด${hasCut ? ' + ใบตัดทุกใบของแฟ้มนี้' : ''} ออกถาวร — กู้คืนไม่ได้</div>
     <div class="modal-actions">
@@ -488,14 +502,14 @@ function askDeleteFile(wbs) {
 }
 
 function askDeletePassword(wbs) {
-  $('modalBox').innerHTML = `<h3>🔒 ยืนยันการลบ</h3>
+  $('modalBox').innerHTML = `<h3>${ic('lock')}ยืนยันการลบ</h3>
     <div class="sub">ใส่รหัสผ่านเพื่อลบแฟ้ม <b>${esc(wbs)}</b> ถาวร</div>
     <div class="field" style="margin-top:12px"><label>รหัสผ่าน</label>
       <input type="password" id="delPw" autocomplete="off"></div>
     <div id="delErr" class="err"></div>
     <div class="modal-actions">
       <button class="btn sec" id="delCancel2">ยกเลิก</button>
-      <button class="btn" id="delDo" style="background:var(--err)">🗑️ ลบถาวร</button>
+      <button class="btn" id="delDo" style="background:var(--err)">${ic('trash')}ลบถาวร</button>
     </div>`;
   $('delCancel2').addEventListener('click', closeModal);
   $('delDo').addEventListener('click', () => doDeleteFile(wbs));
@@ -511,7 +525,7 @@ async function doDeleteFile(wbs) {
     goPanel('files');
     await loadBudgets();
     $('filesOut').insertAdjacentHTML('afterbegin',
-      `<div class="flash ok">🗑️ ลบแฟ้ม ${esc(wbs)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`);
+      `<div class="flash ok">${ic('check')}ลบแฟ้ม ${esc(wbs)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`);
   } catch (err) {
     btn.disabled = false;
     $('delErr').textContent = err.message;
@@ -525,7 +539,7 @@ async function openSummary(b) {
     <div class="balrow"><span>ยอดจัดสรร</span><b>${fmt(b.allocation)}</b></div>
     <div class="balrow"><span>จ่ายแล้วรวม</span><b>${fmt(b.paid)}</b></div>
     <div class="balrow big"><span>คงเหลือ</span><b class="${b.balance < 0 ? 'err' : ''}">${fmt(b.balance)}</b></div>
-    <div id="sumList" class="sub">⏳ กำลังโหลดงวด…</div>
+    <div id="sumList" class="sub">${spin}กำลังโหลดงวด…</div>
     <div class="modal-actions"><button class="btn sec" id="cancelSlip">ปิด</button></div>`;
   $('modal').classList.add('show');
   $('cancelSlip').addEventListener('click', closeModal);
@@ -536,7 +550,7 @@ async function openSummary(b) {
     slips.forEach((s) => {
       html += `<tr><td>${esc(s.slipNo)}</td><td>${esc(s.date)}</td>
         <td class="num">${fmt(s.payNow)}</td><td class="num">${fmt(s.balance)}</td>
-        <td><button class="btn sec" data-pdf="${esc(s.slipNo)}">ออก PDF</button></td></tr>`;
+        <td><button class="btn sec" data-pdf="${esc(s.slipNo)}">${ic('download')}ออก PDF</button></td></tr>`;
     });
     $('sumList').innerHTML = html + '</tbody></table>';
     document.querySelectorAll('[data-pdf]').forEach((btn) =>
@@ -547,16 +561,16 @@ async function openSummary(b) {
 }
 
 async function makePdf(btn) {
-  btn.disabled = true; btn.textContent = '⏳ กำลังออก…';
+  btn.disabled = true; btn.innerHTML = spin + 'กำลังออก…';
   try {
     const r = await callApi('makePdf', { slipNo: btn.dataset.pdf });
     const a = document.createElement('a');
     a.href = 'data:application/pdf;base64,' + r.b64;
     a.download = r.filename;
     a.click();
-    btn.disabled = false; btn.textContent = 'ออก PDF';
+    btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
   } catch (err) {
-    btn.disabled = false; btn.textContent = 'ออก PDF';
+    btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
     alert('ออก PDF ไม่สำเร็จ: ' + err.message);
   }
 }
@@ -575,7 +589,7 @@ function openSlip(b) {
     <div class="field"><label>ชื่อ พขร.</label>
       <div style="display:flex;gap:8px">
         <select id="f-driver" style="flex:1"><option value="">— เลือก —</option>${drivers.map((d) => `<option>${esc(d)}</option>`).join('')}</select>
-        <button type="button" class="btn sec" id="addDriver" style="flex:none">＋ เพิ่ม</button>
+        <button type="button" class="btn sec" id="addDriver" style="flex:none">${ic('plus')}เพิ่ม</button>
       </div>
       <div id="addDriverRow" style="display:none;gap:8px;margin-top:8px">
         <input id="newDriver" placeholder="ชื่อ พขร. ใหม่" style="flex:1">
@@ -644,7 +658,7 @@ async function submitSlip(b) {
     });
     closeModal();
     $('detailOut').insertAdjacentHTML('afterbegin',
-      `<div class="flash ok">✅ บันทึกใบตัดเลขที่ ${r.slipNo} — คงเหลือใหม่ ${fmt(r.balance)}</div>`);
+      `<div class="flash ok">${ic('check')}บันทึกใบตัดเลขที่ ${r.slipNo} — คงเหลือใหม่ ${fmt(r.balance)}</div>`);
     loadBudgets();
   } catch (err) {
     // server เป็นคนตัดสิน (กันเบิกเกิน/แข่งกันเบิก) — โชว์เหตุผลจาก server

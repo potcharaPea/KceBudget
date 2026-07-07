@@ -29,8 +29,11 @@
     --ease: cubic-bezier(.4, 0, .2, 1);
   }
   /* inline SVG icons */
-  .ic { width: 18px; height: 18px; flex: none; vertical-align: middle; }
-  .btn .ic { width: 16px; height: 16px; margin-right: 7px; margin-top: -2px; }
+  .ic { width: 18px; height: 18px; flex: none; vertical-align: -3px; }
+  .btn .ic { width: 16px; height: 16px; margin-right: 7px; margin-top: 0; vertical-align: -3px; }
+  .sub .ic, .ok .ic, .err .ic, .flash .ic, b .ic { margin-right: 6px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; margin-right: 7px; opacity: .8; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   button:focus:not(:focus-visible) { outline: none; }
   /* ===== Dark mode — ชุดเดียวกัน คนละพื้นผิว (Rausch คงไว้) ===== */
@@ -63,7 +66,7 @@
     width: var(--side); flex: none; background: var(--card); border-right: 1px solid var(--line);
     display: flex; flex-direction: column; height: 100%;
   }
-  .content { flex: 1; overflow: auto; padding: 26px 30px; }
+  .content { flex: 1; overflow: auto; padding: 30px 36px; }
   .content { min-width: 0; }
 
   /* ---------- แบรนด์ ---------- */
@@ -150,12 +153,12 @@
 
   .empty-state { max-width: 460px; margin: 12vh auto 0; text-align: center; color: var(--muted); }
   .empty-state .ico { font-size: 44px; }
-  .empty-state h2 { font-size: 18px; color: var(--ink); margin: 10px 0 4px; }
+  .empty-state h2 { font-size: 18px; font-weight: 600; color: var(--ink); margin: 10px 0 4px; }
 
   /* ---------- นำเข้าไฟล์ ---------- */
-  .page-head { margin-bottom: 4px; }
-  .page-head h2 { font-size: 18px; margin: 0; }
-  .page-head p { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .page-head { margin-bottom: 18px; }
+  .page-head h2 { font-size: 20px; font-weight: 600; letter-spacing: -.015em; margin: 0; }
+  .page-head p { color: var(--muted); font-size: 13px; margin: 5px 0 0; line-height: 1.5; }
   #drop {
     display: block; margin: 18px 0; padding: 34px 0; text-align: center; cursor: pointer; border-radius: var(--radius);
     border: 2px dashed var(--line-strong); background: var(--card); transition: .18s;
@@ -190,9 +193,9 @@
 
   /* ---------- KPI ---------- */
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 16px 0; }
-  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 18px; box-shadow: var(--shadow); }
-  .kpi .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-  .kpi .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 17px 20px; box-shadow: var(--shadow); }
+  .kpi .v { font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .kpi .l { font-size: 12px; color: var(--muted); margin-top: 5px; }
   .kpi.ok .v { color: var(--ok); } .kpi.err .v { color: var(--err); }
 
   /* ---------- Dashboard charts ---------- */
@@ -249,7 +252,7 @@
   #modal { position: fixed; inset: 0; background: var(--scrim); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
   #modal.show { display: flex; animation: fade .15s ease; }
   #modal .box { background: var(--card); color: var(--ink); border-radius: 18px; padding: 26px; width: 480px; max-width: 100%; max-height: 90vh; overflow: auto; box-shadow: 0 24px 70px rgba(0,0,0,.35); animation: pop .2s var(--ease); }
-  #modal h3 { margin: 0 0 4px; font-size: 17px; }
+  #modal h3 { margin: 0 0 4px; font-size: 18px; font-weight: 600; letter-spacing: -.015em; }
   #modal .box > .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
   #modal table { margin-top: 12px; } #modal th, #modal td { padding: 8px 10px; }
   .field { margin: 12px 0; }
@@ -304,7 +307,7 @@
       <div class="sidebar-foot">
         <button class="btn block" id="navImport"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5V4M8 7.5 12 3.5l4 4"/><path d="M4.5 16.5v1.5A2 2 0 0 0 6.5 20h11a2 2 0 0 0 2-2v-1.5"/></svg>นำเข้าไฟล์ ZPSR018</button>
         <button class="btn sec block" id="reloadBudgets"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.4-5.9"/><path d="M20.5 4v5h-5"/></svg>โหลดใหม่</button>
-        <button class="btn sec block" id="themeToggle">🌙 โหมดมืด</button>
+        <button class="btn sec block" id="themeToggle"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 1 1 11 3.5 6.6 6.6 0 0 0 20.5 13z"/></svg>โหมดมืด</button>
         <button class="credit-link" id="credit">ⓘ ผู้พัฒนา</button>
       </div>
     </aside>
