@@ -115,6 +115,8 @@
   /* ---------- ปุ่มล่าง sidebar ---------- */
   .sidebar-foot { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
   .back-bar { margin-bottom: 14px; }
+  .credit-link { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 12px; cursor: pointer; padding: 4px; text-align: center; }
+  .credit-link:hover { color: var(--primary); text-decoration: underline; }
 
   /* ---------- ปุ่ม ---------- */
   .btn {
@@ -289,6 +291,7 @@
         <button class="btn block" id="navImport">⬆️ นำเข้าไฟล์ ZPSR018</button>
         <button class="btn sec block" id="reloadBudgets">🔄 โหลดใหม่</button>
         <button class="btn sec block" id="themeToggle">🌙 โหมดมืด</button>
+        <button class="credit-link" id="credit">ⓘ ผู้พัฒนา</button>
       </div>
     </aside>
 

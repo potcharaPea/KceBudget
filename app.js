@@ -50,6 +50,19 @@ $('themeToggle').addEventListener('click', () => {
 // PWA — ลงทะเบียน service worker (ติดตั้ง/ออฟไลน์). ทำงานเฉพาะ https หรือ localhost
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
+// เครดิตผู้พัฒนา — กดแล้วเด้ง modal
+$('credit').addEventListener('click', () => {
+  $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
+    <div style="text-align:center;padding:10px 0">
+      <div style="font-size:44px">👨‍💻</div>
+      <div style="font-size:18px;font-weight:600;margin-top:8px">นายพชระ ปรีดากรณ์</div>
+      <div class="sub" style="margin-top:4px">วศก.ผปร. กฟส.คช.</div>
+    </div>
+    <div class="modal-actions" style="justify-content:center"><button class="btn" id="creditClose">ปิด</button></div>`;
+  $('modal').classList.add('show');
+  $('creditClose').addEventListener('click', closeModal);
+});
+
 // ================= View: นำเข้าไฟล์ =================
 const drop = $('drop');
 $('file').addEventListener('change', (e) => e.target.files[0] && handleFile(e.target.files[0]));
