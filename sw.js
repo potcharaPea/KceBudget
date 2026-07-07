@@ -1,6 +1,6 @@
 // service worker — cache app shell ให้ติดตั้ง/ใช้ออฟไลน์ได้ (PWA)
 // เปลี่ยนเลขเวอร์ชันเมื่อแก้ไฟล์ใน ASSETS เพื่อบังคับ refresh cache
-const CACHE = 'kcebudget-v2';
+const CACHE = 'kcebudget-v3';
 const ASSETS = [
   './', './index.html', './app.js', './config.js', './api.js', './parser.js',
   './manifest.webmanifest', './icon.svg',
@@ -21,15 +21,12 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // GAS backend ต้อง online เสมอ — อย่าแตะ/อย่า cache
   if (url.hostname.includes('script.google.com')) return;
-  if (e.request.method !== 'GET') return;
-  // cache-first + เติม cache ไฟล์ same-origin ที่โหลดสำเร็จ, ออฟไลน์ fallback = index
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // network-first: ออนไลน์ = ได้โค้ดใหม่เสมอ (กันเสิร์ฟ app.js เก่าค้าง), ออฟไลน์ = fallback cache
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && url.origin === location.origin) {
-        const clone = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, clone));
-      }
+    fetch(e.request).then((res) => {
+      if (res.ok) { const clone = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, clone)); }
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }).catch(() => caches.match(e.request).then((hit) => hit || caches.match('./index.html')))
   );
 });
