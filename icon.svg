@@ -1,4 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="0" fill="#ff385c"/>
-  <path fill="#fff" d="M296 56 L150 288 h84 l-30 168 168-244 h-92 z"/>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g fill="#222222">
+    <rect x="146" y="240" width="36" height="100" rx="7"/>
+    <rect x="198" y="196" width="36" height="144" rx="7"/>
+    <rect x="250" y="150" width="36" height="190" rx="7"/>
+    <rect x="302" y="256" width="36" height="84" rx="7" opacity="0.3"/>
+  </g>
+  <path d="M136 245 L346 152" fill="none" stroke="#ff385c" stroke-width="4" stroke-dasharray="9 7"/>
+  <g transform="translate(320,168) rotate(24)">
+    <circle cx="0" cy="0" r="11" fill="none" stroke="#ff385c" stroke-width="6"/>
+    <circle cx="0" cy="34" r="11" fill="none" stroke="#ff385c" stroke-width="6"/>
+    <line x1="7" y1="7" x2="58" y2="58" stroke="#ff385c" stroke-width="6" stroke-linecap="round"/>
+    <line x1="7" y1="27" x2="58" y2="-24" stroke="#ff385c" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <rect x="192" y="382" width="128" height="46" rx="23" fill="#ff385c"/>
+  <text x="256" y="414" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="34" letter-spacing="3" fill="#ffffff">KCE</text>
 </svg>

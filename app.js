@@ -558,7 +558,15 @@ function openSlip(b) {
     <div class="field"><label>ตำแหน่ง/ที่อยู่</label><input id="f-position"></div>
     <div class="field"><label>ประกอบใบสำคัญจ่ายเลขที่</label><input id="f-ref"></div>
     <div class="field"><label>ชื่อ พขร.</label>
-      <select id="f-driver"><option value="">— เลือก —</option>${drivers.map((d) => `<option>${esc(d)}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:8px">
+        <select id="f-driver" style="flex:1"><option value="">— เลือก —</option>${drivers.map((d) => `<option>${esc(d)}</option>`).join('')}</select>
+        <button type="button" class="btn sec" id="addDriver" style="flex:none">＋ เพิ่ม</button>
+      </div>
+      <div id="addDriverRow" style="display:none;gap:8px;margin-top:8px">
+        <input id="newDriver" placeholder="ชื่อ พขร. ใหม่" style="flex:1">
+        <button type="button" class="btn" id="saveDriver" style="flex:none">บันทึก</button>
+      </div>
+      <div id="driverErr" class="err"></div></div>
     <div class="field"><label>สัญญาจ้างเลขที่</label><input id="f-contract"></div>
     <div class="field"><label>วันที่ตัด</label><input type="date" id="f-slipDate" value="${today}"></div>
     <div class="field"><label>จ่ายครั้งนี้ (บาท)</label><input type="number" step="0.01" min="0" id="f-payNow"></div>
@@ -580,8 +588,29 @@ function openSlip(b) {
     el.className = bottom < 0 ? 'err' : '';
     $('slipErr').textContent = bottom < 0 ? 'เบิกเกินยอดคงเหลือ' : '';
   });
+  $('addDriver').addEventListener('click', () => {
+    $('addDriverRow').style.display = 'flex'; $('newDriver').focus();
+  });
+  $('saveDriver').addEventListener('click', saveDriver);
   $('cancelSlip').addEventListener('click', closeModal);
   $('submitSlip').addEventListener('click', () => submitSlip(b));
+}
+
+// เพิ่มชื่อ พขร. ใหม่จากในฟอร์ม → เก็บลงชีต + เติม dropdown + เลือกให้เลย
+async function saveDriver() {
+  const name = $('newDriver').value.trim();
+  if (!name) { $('driverErr').textContent = 'ใส่ชื่อ พขร. ก่อน'; return; }
+  const btn = $('saveDriver'); btn.disabled = true; $('driverErr').textContent = '';
+  try {
+    const list = await callApi('addDriver', { name });
+    settings['พขร.'] = list;
+    const sel = $('f-driver');
+    sel.innerHTML = `<option value="">— เลือก —</option>${list.map((d) => `<option>${esc(d)}</option>`).join('')}`;
+    sel.value = name;
+    $('addDriverRow').style.display = 'none'; $('newDriver').value = '';
+  } catch (err) {
+    $('driverErr').textContent = err.message;
+  } finally { btn.disabled = false; }
 }
 
 function closeModal() { $('modal').classList.remove('show'); }

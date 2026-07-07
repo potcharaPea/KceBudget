@@ -59,6 +59,7 @@ function doPost(e) {
       case 'getSlips': result = apiGetSlips_(data.key); break;
       case 'makePdf': result = apiMakePdf_(data.slipNo); break;
       case 'deleteFile': result = apiDeleteFile_(data); break;
+      case 'addDriver': result = apiAddDriver_(data.name); break;
       default: throw new Error('ไม่รู้จัก action: ' + req.action);
     }
     return json_({ ok: true, result: result });
@@ -112,6 +113,15 @@ function apiGetSettings_() {
     out[type].push(val);
   });
   return out;
+}
+
+// เพิ่มชื่อ พขร. ลงแท็บตั้งค่า (กันซ้ำ) → คืนรายชื่อล่าสุดให้ dropdown
+function apiAddDriver_(name) {
+  name = String(name || '').trim();
+  if (!name) throw new Error('ยังไม่ได้ใส่ชื่อ พขร.');
+  var existing = apiGetSettings_()['พขร.'] || [];
+  if (existing.indexOf(name) < 0) ss_().getSheetByName(TABS.settings).appendRow(['พขร.', name]);
+  return apiGetSettings_()['พขร.'] || [];
 }
 
 // นำเข้างบ + จัดการ re-import (4.5)
