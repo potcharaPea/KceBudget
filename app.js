@@ -47,6 +47,9 @@ $('themeToggle').addEventListener('click', () => {
   applyTheme(next);
 });
 
+// PWA — ลงทะเบียน service worker (ติดตั้ง/ออฟไลน์). ทำงานเฉพาะ https หรือ localhost
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+
 // ================= View: นำเข้าไฟล์ =================
 const drop = $('drop');
 $('file').addEventListener('change', (e) => e.target.files[0] && handleFile(e.target.files[0]));

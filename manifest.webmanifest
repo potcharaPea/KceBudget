@@ -1,0 +1,15 @@
+{
+  "name": "ใบตัดงบ กฟส.คำชะอี",
+  "short_name": "ใบตัดงบ",
+  "description": "คุมงบก่อสร้าง ZPSR018 · เปิดใบตัด · ออก PDF",
+  "lang": "th",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f7f7",
+  "theme_color": "#ff385c",
+  "icons": [
+    { "src": "./icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" }
+  ]
+}

@@ -1,7 +1,8 @@
 import { createServer } from 'http';
 import { readFile } from 'fs/promises';
 import { extname } from 'path';
-const TYPES = { '.html':'text/html', '.js':'text/javascript', '.mjs':'text/javascript', '.pdf':'application/pdf' };
+const TYPES = { '.html':'text/html', '.js':'text/javascript', '.mjs':'text/javascript', '.pdf':'application/pdf',
+  '.webmanifest':'application/manifest+json', '.json':'application/json', '.svg':'image/svg+xml' };
 createServer(async (req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p === '/') p = '/index.html';
