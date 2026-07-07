@@ -35,9 +35,11 @@ $('reloadBudgets').addEventListener('click', loadBudgets);
 $('search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); renderFiles(); });
 
 // ---------- ธีมสว่าง/มืด (จำใน localStorage, default ตามระบบ) ----------
+const ICON_SUN = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg>';
+const ICON_MOON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 1 1 11 3.5 6.6 6.6 0 0 0 20.5 13z"/></svg>';
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
-  $('themeToggle').textContent = t === 'dark' ? '☀️ โหมดสว่าง' : '🌙 โหมดมืด';
+  $('themeToggle').innerHTML = t === 'dark' ? ICON_SUN + 'โหมดสว่าง' : ICON_MOON + 'โหมดมืด';
 }
 applyTheme(localStorage.getItem('theme') ||
   (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
