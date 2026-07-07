@@ -570,18 +570,35 @@ async function makePdf(btn) {
     const bytes = Uint8Array.from(atob(r.b64), (c) => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const file = new File([blob], r.filename, { type: 'application/pdf' });
-    // มือถือ: เปิด share sheet (เซฟลงเครื่อง/แชร์เข้าไลน์ได้); เดสก์ท็อป/ไม่รองรับ: ดาวน์โหลด
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: r.filename }); }
-      catch (e) { if (e.name !== 'AbortError') downloadBlob(blob, r.filename); } // ยกเลิก = ไม่ทำอะไร
+    // มือถือ (touch): เด้ง modal ให้กดแชร์เอง — iOS ต้องการ user gesture สดๆ ไม่งั้น share ถูกบล็อก
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
+      showPdfResult(blob, file);
     } else {
-      downloadBlob(blob, r.filename);
+      downloadBlob(blob, r.filename); // เดสก์ท็อป: ดาวน์โหลดตรง
     }
   } catch (err) {
     alert('ออก PDF ไม่สำเร็จ: ' + err.message);
   } finally {
     btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
   }
+}
+
+// modal ผลลัพธ์ PDF (มือถือ) — ปุ่มแชร์เป็น gesture ใหม่ (iOS-safe) + ลิงก์เปิดดู
+function showPdfResult(blob, file) {
+  const url = URL.createObjectURL(blob);
+  $('modalBox').innerHTML = `<h3>${ic('check')}ออกใบตัดงบเรียบร้อย</h3>
+    <div class="sub">${esc(file.name)}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
+      <button class="btn block" id="pdfShare">${ic('upload')}แชร์ / บันทึกลงเครื่อง</button>
+      <a class="btn sec block" href="${url}" target="_blank" rel="noopener" style="text-decoration:none">${ic('download')}เปิดดู PDF</a>
+    </div>
+    <div class="modal-actions"><button class="btn sec" id="pdfClose">ปิด</button></div>`;
+  $('modal').classList.add('show');
+  $('pdfClose').addEventListener('click', () => { setTimeout(() => URL.revokeObjectURL(url), 3000); closeModal(); });
+  $('pdfShare').addEventListener('click', async () => {
+    try { await navigator.share({ files: [file], title: file.name }); }
+    catch (e) { if (e.name !== 'AbortError') alert('แชร์ไม่สำเร็จ — ลองปุ่ม "เปิดดู PDF" แล้วกดแชร์จากตัวอ่าน PDF: ' + e.message); }
+  });
 }
 
 function downloadBlob(blob, name) {
