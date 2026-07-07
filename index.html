@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ใบตัดงบ กฟส.คำชะอี</title>
+<style>
+  :root {
+    --font: "Leelawadee UI", "Segoe UI", Tahoma, sans-serif;
+    --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+    --primary: #7c3aed; --primary-dark: #6d28d9; --primary-soft: #f5f3ff;
+    --ink: #1e2233; --muted: #6b7280; --line: #eceef3; --bg: #f5f6fa;
+    --ok: #16a34a; --err: #dc2626; --warn: #b45309;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.06);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px; background: var(--bg); color: var(--ink);
+    font-family: var(--font); font-size: 14px; line-height: 1.5;
+    max-width: 980px; margin-inline: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* header */
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  .logo {
+    width: 46px; height: 46px; flex: none; border-radius: 12px; display: grid; place-items: center;
+    font-size: 24px; color: #fff; background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    box-shadow: 0 6px 16px rgba(109,40,217,.35);
+  }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+
+  nav { display: flex; gap: 8px; margin-bottom: 20px; background: #eceef3; padding: 5px; border-radius: 12px; width: fit-content; max-width: 100%; flex-wrap: wrap; }
+  nav button {
+    border: none; background: transparent; padding: 9px 18px; border-radius: 9px;
+    cursor: pointer; font-size: 14px; color: var(--muted); font-family: inherit; font-weight: 500;
+    transition: .15s;
+  }
+  nav button:hover { color: var(--ink); }
+  nav button.active { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+  .view { display: none; animation: fade .2s ease; }
+  .view.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  #drop {
+    padding: 20px 0; text-align: center; cursor: pointer; border-radius: var(--radius); transition: .18s;
+  }
+  #drop.over { background: var(--primary-soft); }
+  #drop input { display: none; }
+  .drop-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .drop-hint { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .drop-btn { color: var(--primary); font-weight: 600; }
+  #drop:hover .drop-btn { text-decoration: underline; }
+
+  .btn {
+    border: none; background: var(--primary); color: #fff; padding: 9px 18px; border-radius: 9px;
+    cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 500; transition: .15s;
+    box-shadow: 0 1px 2px rgba(109,40,217,.25);
+  }
+  .btn:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(109,40,217,.28); }
+  .btn:active { transform: none; }
+  .btn.sec { background: #fff; color: var(--primary); border: 1px solid #e2ddf5; box-shadow: none; padding: 7px 14px; font-size: 13px; }
+  .btn.sec:hover { background: var(--primary-soft); border-color: var(--primary); }
+  .btn:disabled { opacity: .45; cursor: default; transform: none; box-shadow: none; }
+
+  .jobbar { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin: 16px 0; box-shadow: var(--shadow); flex-wrap: wrap; }
+  .jobbar label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .jobbar select { padding: 8px 11px; border: 1px solid #dadfe8; border-radius: 9px; font-size: 14px; font-family: var(--mono); color: var(--primary); background: #fff; cursor: pointer; }
+  .jobbar select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .jobbar .jobcount { margin-left: auto; font-size: 12px; color: var(--muted); background: var(--bg); padding: 4px 10px; border-radius: 20px; }
+  #wbs { margin: 18px 0 8px; font-size: 15px; font-weight: 600; }
+  #wbs span, .mono { font-family: var(--mono); color: var(--primary); }
+  .net { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin: 16px 0; overflow: hidden; box-shadow: var(--shadow); }
+  .net h2 { font-size: 14px; margin: 0; padding: 13px 18px; background: #fafbfd; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .net h2 .dept { color: var(--primary); font-family: var(--mono); font-size: 13px; margin-left: auto; background: var(--primary-soft); padding: 2px 8px; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 11px 18px; text-align: left; border-bottom: 1px solid var(--line); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background .12s; }
+  tbody tr:hover { background: #fafaff; }
+  th { background: #fff; color: #9099a8; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.act { font-family: var(--mono); color: var(--primary); font-size: 13px; }
+  tr.skip td { color: #b3b9c6; }
+  .yes { color: var(--ok); font-weight: 600; }
+  .no { color: #cbd5e1; }
+  .err { color: var(--err); }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  /* กล่องแจ้งผล (ok/err) เมื่ออยู่ระดับบนสุด */
+  #importResult .ok, #importResult .err, #ledgerOut > .ok, #ledgerOut > .err {
+    display: block; padding: 12px 16px; border-radius: 10px; margin: 12px 0; font-size: 14px;
+  }
+  #importResult .ok, #ledgerOut > .ok { background: #ecfdf3; border: 1px solid #abefc6; }
+  #importResult .err, #ledgerOut > .err { background: #fef3f2; border: 1px solid #fecdca; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin: 16px 0; box-shadow: var(--shadow); }
+  .diff { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 11px 14px; margin: 8px 0; }
+  td a { color: var(--primary); font-weight: 500; text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+
+  /* ฟอร์มเปิดใบตัด (modal) */
+  #modal { position: fixed; inset: 0; background: rgba(20,20,40,.45); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+  #modal.show { display: flex; animation: fade .15s ease; }
+  #modal .box { background: #fff; border-radius: 16px; padding: 24px; width: 480px; max-width: 100%; max-height: 90vh; overflow: auto; box-shadow: 0 20px 60px rgba(16,24,40,.3); }
+  #modal h3 { margin: 0 0 4px; font-size: 17px; }
+  #modal .box > .sub { margin-bottom: 14px; }
+  #modal table { margin-top: 12px; }
+  #modal th, #modal td { padding: 8px 10px; }
+  .field { margin: 12px 0; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+  .field input, .field select { width: 100%; padding: 9px 11px; border: 1px solid #dadfe8; border-radius: 9px; font-size: 14px; font-family: inherit; transition: .15s; background: #fff; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .balrow { display: flex; justify-content: space-between; padding: 7px 0; font-size: 14px; color: var(--muted); }
+  .balrow b { font-variant-numeric: tabular-nums; color: var(--ink); }
+  .balrow.big { font-size: 17px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; color: var(--ink); font-weight: 600; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+  @media (max-width: 560px) {
+    body { padding: 20px 14px; }
+    th, td { padding: 9px 10px; }
+    .net h2 { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">⚡</div>
+    <div>
+      <h1>ใบตัดงบ — กฟส.คำชะอี</h1>
+      <p class="sub">นำเข้างบ → คุมยอดคงเหลือ → เปิดใบตัด → ออกใบตัดงบ PDF</p>
+    </div>
+  </header>
+
+  <nav>
+    <button data-view="import" class="active">นำเข้าไฟล์ ZPSR018</button>
+    <button data-view="ledger">ก้อนงบ / เปิดใบตัด</button>
+  </nav>
+
+  <!-- View: นำเข้า -->
+  <section id="view-import" class="view active">
+    <label id="drop">
+      <input type="file" id="file" accept="application/pdf">
+      <div class="drop-title">ลากไฟล์ ZPSR018 มาวาง</div>
+      <div class="drop-hint">หรือ <span class="drop-btn">เลือกไฟล์ .pdf</span> เพื่ออัพโหลด</div>
+    </label>
+    <div id="importOut"></div>
+  </section>
+
+  <!-- View: ก้อนงบ -->
+  <section id="view-ledger" class="view">
+    <button class="btn sec" id="reloadBudgets">🔄 โหลดก้อนงบ</button>
+    <div id="ledgerOut"></div>
+  </section>
+
+  <!-- Modal ฟอร์มเปิดใบตัด -->
+  <div id="modal"><div class="box" id="modalBox"></div></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
