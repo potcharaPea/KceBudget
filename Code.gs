@@ -19,8 +19,8 @@ function setup() {
               : SpreadsheetApp.create('ใบตัดงบ กฟส.คำชะอี — ฐานข้อมูล');
   if (!id) PROP.setProperty(SHEET_ID_KEY, ss.getId());
 
-  ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง']);
-  ensureTab_(ss, TABS.ledger, ['เลขที่ใบ', 'คีย์งบ', 'วันที่ตัด', 'จ่ายครั้งนี้', 'คงเหลือหลังตัด', 'ชื่องาน', 'ผู้เบิก', 'ตำแหน่ง', 'ชื่อ พขร.', 'สัญญาจ้าง', 'ลิงก์ PDF', 'ผู้ทำรายการ', 'timestamp']);
+  ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง', 'ชื่องาน']);
+  ensureTab_(ss, TABS.ledger, ['เลขที่ใบ', 'คีย์งบ', 'วันที่ตัด', 'จ่ายครั้งนี้', 'คงเหลือหลังตัด', 'ชื่องาน', 'ผู้เบิก', 'ตำแหน่ง', 'ชื่อ พขร.', 'สัญญาจ้าง', 'เลขใบสำคัญจ่าย', 'ผู้ทำรายการ', 'timestamp']);
   ensureTab_(ss, TABS.revision, ['คีย์งบ', 'ยอดเก่า', 'ยอดใหม่', 'วันที่', 'หมายเหตุ', 'ผู้แก้']);
   ensureTab_(ss, TABS.settings, ['ประเภท', 'ค่า']);
   // ใส่ตัวอย่างประเภท พขร. ถ้าแท็บตั้งค่ายังว่าง
@@ -58,6 +58,7 @@ function doPost(e) {
       case 'createSlip': result = apiCreateSlip_(data); break;
       case 'getSlips': result = apiGetSlips_(data.key); break;
       case 'makePdf': result = apiMakePdf_(data.slipNo); break;
+      case 'deleteFile': result = apiDeleteFile_(data); break;
       default: throw new Error('ไม่รู้จัก action: ' + req.action);
     }
     return json_({ ok: true, result: result });
@@ -95,6 +96,8 @@ function apiGetBudgets_() {
       // เลขกิจกรรมดึงจากคีย์ (ปลอดภัยจาก Sheet ตัด leading zero — คีย์เก็บ "0020" ครบ)
       key: r[0], wbs: r[1], network: r[2], dept: r[3], category: r[4], act: String(r[0]).split('|')[2],
       allocation: allocation, paid: paid, balance: round2(allocation - paid),
+      workName: r[9] || '', // ชื่องาน (กรอกครั้งเดียวตอน import → prefill ตอนเปิดใบตัด)
+      imported: r[7] ? new Date(r[7]).toISOString() : '', // วันที่ import (ใช้จัดกลุ่มแฟ้มตามวันที่สร้าง)
     };
   });
 }
@@ -112,7 +115,7 @@ function apiGetSettings_() {
 }
 
 // นำเข้างบ + จัดการ re-import (4.5)
-// data = { fileName, budgets:[{key,wbs,network,dept,category,act,allocation}], confirmKeys:[] }
+// data = { fileName, workName, budgets:[{key,wbs,network,dept,category,act,allocation}], confirmKeys:[] }
 function apiImportBudget_(data) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -132,7 +135,7 @@ function apiImportBudget_(data) {
     // เพิ่มคีย์ใหม่
     cls.toAdd.forEach(function (b) {
       // นำหน้า act ด้วย ' บังคับ Sheet เก็บเป็น text ไม่ตัด leading zero (คอลัมน์เลขกิจกรรมโชว์ 0020)
-      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '']);
+      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '']);
     });
 
     // อัปเดตที่ยืนยันแล้ว + log ประวัติแก้งบ (ledger เดิมไม่แตะ)
@@ -160,6 +163,39 @@ function apiImportBudget_(data) {
   }
 }
 
+// เลขใบตัดถัดไป = max ที่มีอยู่ + 1 (กันเลขซ้ำเมื่อมีการลบแถว)
+function nextSlipNo_(sh) {
+  var v = sh.getDataRange().getValues(), max = 0;
+  for (var i = 1; i < v.length; i++) { var n = Number(v[i][0]); if (n > max) max = n; }
+  return max + 1;
+}
+
+// ลบทั้งแฟ้ม (WBS) — งบทุกหมวด + ใบตัดทุกใบของ WBS นั้น (ยืนยันด้วยรหัสผ่าน)
+// data = { wbs, password }
+function apiDeleteFile_(data) {
+  if (String(data.password) !== '509758') throw new Error('รหัสผ่านไม่ถูกต้อง');
+  if (!data.wbs) throw new Error('ไม่ระบุหมายเลขงาน (WBS)');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var wbs = data.wbs;
+    var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return r[1] === wbs; });
+    var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) { return String(r[1]).split('|')[0] === wbs; });
+    return { budgets: budgets, slips: slips };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ลบแถวที่เข้าเงื่อนไข (ข้าม header) — วนจากล่างขึ้นบนกัน index เลื่อน
+function deleteRowsWhere_(sh, pred) {
+  var v = sh.getDataRange().getValues(), n = 0;
+  for (var i = v.length - 1; i >= 1; i--) { // i=0 = header
+    if (pred(v[i])) { sh.deleteRow(i + 1); n++; }
+  }
+  return n;
+}
+
 function updateAllocation_(sh, key, newVal, now, fileName) {
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -173,7 +209,7 @@ function updateAllocation_(sh, key, newVal, now, fileName) {
 }
 
 // เปิดใบตัดงบ 1 ใบ — validate กันเบิกเกินฝั่ง server + ล็อกกันเบิกซ้ำพร้อมกัน
-// data = { key, payNow, workName, requester, position, driver, contract, slipDate }
+// data = { key, payNow, workName, requester, position, driver, contract, slipDate, ref }
 function apiCreateSlip_(data) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -189,12 +225,12 @@ function apiCreateSlip_(data) {
     var payNow = Number(data.payNow);
     var newBalance = round2(bud.balance - payNow);
     var ledSh = ss_().getSheetByName(TABS.ledger);
-    var slipNo = ledSh.getLastRow(); // header=row1 → ใบแรก=1
+    var slipNo = nextSlipNo_(ledSh); // max+1 (กัน slipNo ซ้ำหลังลบแฟ้ม — ไม่พึ่งจำนวนแถว)
 
     ledSh.appendRow([
       slipNo, data.key, data.slipDate || new Date(), payNow, newBalance,
       data.workName || '', data.requester || '', data.position || '',
-      data.driver || '', data.contract || '', '', // ลิงก์ PDF ว่างไว้ (Phase 3)
+      data.driver || '', data.contract || '', data.ref || '', // เลขใบสำคัญจ่าย (กรอกในแอป)
       Session.getActiveUser().getEmail(), new Date(),
     ]);
     return { slipNo: slipNo, paid: round2(bud.paid + payNow), balance: newBalance };
@@ -211,19 +247,18 @@ function apiGetSlips_(key) {
     .filter(function (r) { return r[1] === key; })
     .map(function (r) {
       return { slipNo: r[0], date: fmtDate_(r[2]), payNow: Number(r[3]), balance: Number(r[4]),
-               workName: r[5], requester: r[6], pdf: r[10] };
+               workName: r[5], requester: r[6] };
     });
 }
 
-// ออกใบตัดงบ PDF จาก template Google Doc → เก็บ Drive → เขียนลิงก์กลับ ledger
+// ออกใบตัดงบ PDF จาก template Google Doc → ส่ง bytes ให้เครื่องโหลด (ไม่เก็บ Drive)
 function apiMakePdf_(slipNo) {
   var led = rows_(TABS.ledger);
-  var rowIdx = -1, row = null;
+  var row = null;
   for (var i = 0; i < led.values.length; i++) {
-    if (String(led.values[i][0]) === String(slipNo)) { rowIdx = i; row = led.values[i]; break; }
+    if (String(led.values[i][0]) === String(slipNo)) { row = led.values[i]; break; }
   }
   if (!row) throw new Error('ไม่พบใบตัดเลขที่ ' + slipNo);
-  if (row[10]) return { url: row[10] }; // มี PDF อยู่แล้ว → ไม่สร้างซ้ำ
 
   var key = row[1];
   var bud = null, budgets = apiGetBudgets_();
@@ -243,17 +278,18 @@ function apiMakePdf_(slipNo) {
   var bottom = splitMoney_(Number(row[4]));
   var dp = thaiDateParts_(row[2]);
 
+  // คีย์ = โค้ดใน template (ปีกกาเดี่ยว {CODE})
   var map = {
-    'เลขใบสำคัญจ่าย': '', 'ชื่องาน': row[5], 'WBS': bud.wbs,
-    'วันที่': dp.day, 'เดือน': dp.month, 'ปี': dp.year,
-    'ผู้เบิก': row[6], 'ตำแหน่ง': row[7],
-    'อนุมัติที่': '', 'อนุมัติลว': '',
-    'แผนก': bud.dept, 'หมวดงบ': bud.category, 'โครงข่าย': bud.network, 'เลขกิจกรรม': bud.act,
-    'ยอดเงิน_บาท': alloc.baht, 'ยอดเงิน_สต': alloc.sat,
-    'จ่ายแล้ว_บาท': paid.baht, 'จ่ายแล้ว_สต': paid.sat,
-    'คงเหลือบน_บาท': top.baht, 'คงเหลือบน_สต': top.sat,
-    'จ่ายครั้งนี้_บาท': now.baht, 'จ่ายครั้งนี้_สต': now.sat,
-    'คงเหลือล่าง_บาท': bottom.baht, 'คงเหลือล่าง_สต': bottom.sat,
+    REF: row[10] || '', JOB: row[5], WBS: bud.wbs,
+    DD: dp.day, MM: dp.month, YY: dp.year,
+    USR: row[6], POS: row[7],
+    APV: '', APD: '',
+    DPT: bud.dept, CAT: bud.category, NET: bud.network, ACT: bud.act,
+    YB: alloc.baht, YS: alloc.sat,
+    JB: paid.baht, JS: paid.sat,
+    KB: top.baht, KS: top.sat,
+    CB: now.baht, CS: now.sat,
+    LB: bottom.baht, LS: bottom.sat,
   };
 
   var tmplId = PROP.getProperty('TEMPLATE_DOC_ID');
@@ -263,26 +299,16 @@ function apiMakePdf_(slipNo) {
   var doc = DocumentApp.openById(copy.getId());
   var body = doc.getBody();
   Object.keys(map).forEach(function (k) {
-    body.replaceText('\\{\\{' + k + '\\}\\}', String(map[k])); // {} เป็น regex metachar ต้อง escape
+    body.replaceText('\\{' + k + '\\}', String(map[k])); // {} เป็น regex metachar ต้อง escape
   });
   doc.saveAndClose();
 
-  var pdf = pdfFolder_().createFile(copy.getAs('application/pdf'))
-    .setName('ใบตัดงบ_' + slipNo + '_' + key.replace(/\|/g, '-') + '.pdf');
-  copy.setTrashed(true); // ทิ้ง Doc ชั่วคราว เหลือแต่ PDF
-  var url = pdf.getUrl();
-
-  ss_().getSheetByName(TABS.ledger).getRange(rowIdx + 2, 11).setValue(url); // +2: ข้าม header + 0-based
-  return { url: url };
-}
-
-// โฟลเดอร์เก็บ PDF (สร้างครั้งแรกครั้งเดียว เก็บ ID ใน Script Property)
-function pdfFolder_() {
-  var id = PROP.getProperty('PDF_FOLDER_ID');
-  if (id) return DriveApp.getFolderById(id);
-  var folder = DriveApp.createFolder('ใบตัดงบ PDF — กฟส.คำชะอี');
-  PROP.setProperty('PDF_FOLDER_ID', folder.getId());
-  return folder;
+  var blob = copy.getAs('application/pdf');
+  copy.setTrashed(true); // ทิ้ง Doc ชั่วคราว — ไม่เก็บ PDF ใน Drive ส่ง bytes ให้เครื่องโหลด
+  return {
+    filename: 'ใบตัดงบ_' + slipNo + '_' + key.replace(/\|/g, '-') + '.pdf',
+    b64: Utilities.base64Encode(blob.getBytes()),
+  };
 }
 
 // แยกจำนวนเงินเป็น { baht: "12,345", sat: "60" }

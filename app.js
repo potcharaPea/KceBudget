@@ -13,15 +13,39 @@ let parsed = null;      // ผลอ่านไฟล์ล่าสุด {wbs
 let budgets = [];       // ก้อนงบจาก server
 let settings = {};      // master data dropdown
 let selectedWbs = null; // งานที่เลือกดูอยู่ (WBS)
+let search = '';        // คำค้นในหน้าเลือกแฟ้ม
+let dashMode = 'sum';   // โหมด Dashboard: sum | month | year
 
-// ---------- สลับ view ----------
-document.querySelectorAll('nav button').forEach((b) =>
-  b.addEventListener('click', () => {
-    document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
-    $('view-' + b.dataset.view).classList.add('active');
-    if (b.dataset.view === 'ledger') loadBudgets();
-  }));
+// ---------- สลับ panel ใน main + เมนู sidebar ----------
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+  $('panel-' + name).classList.add('active');
+}
+function setMenuActive(name) { // name = ชื่อ panel ของเมนู หรือ '' (ไม่ไฮไลต์)
+  document.querySelectorAll('.menu-item').forEach((m) => m.classList.toggle('active', m.dataset.panel === name));
+}
+const PANEL_RENDER = { files: renderFiles, pending: renderPending, dashboard: renderDashboard };
+function goPanel(name) { setMenuActive(name); showPanel(name); (PANEL_RENDER[name] || (() => {}))(); }
+
+$('menu').addEventListener('click', (e) => {
+  const btn = e.target.closest('.menu-item'); if (btn) goPanel(btn.dataset.panel);
+});
+$('navImport').addEventListener('click', () => { setMenuActive(''); showPanel('import'); });
+$('reloadBudgets').addEventListener('click', loadBudgets);
+$('search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); renderFiles(); });
+
+// ---------- ธีมสว่าง/มืด (จำใน localStorage, default ตามระบบ) ----------
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('themeToggle').textContent = t === 'dark' ? '☀️ โหมดสว่าง' : '🌙 โหมดมืด';
+}
+applyTheme(localStorage.getItem('theme') ||
+  (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+$('themeToggle').addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+});
 
 // ================= View: นำเข้าไฟล์ =================
 const drop = $('drop');
@@ -59,7 +83,11 @@ async function handleFile(file) {
 function renderParsed() {
   const { wbs, networks } = parsed;
   if (!networks.length) { $('importOut').innerHTML = '<div class="err">ไม่พบข้อมูลงบในไฟล์</div>'; return; }
-  let html = `<div id="wbs">หมายเลขงาน (WBS): <span>${esc(wbs || '—')}</span></div>`;
+  let html = hasBackend()
+    ? `<div class="field" style="margin-bottom:16px"><label>ชื่องาน (ใช้กับทุกใบตัดในไฟล์นี้)</label>
+         <input id="f-jobName" placeholder="ชื่องานก่อสร้าง"></div>`
+    : '';
+  html += `<div id="wbs">หมายเลขงาน (WBS): <span>${esc(wbs || '—')}</span></div>`;
   for (const n of networks) {
     html += `<div class="net"><h2>โครงข่าย ${esc(n.network)}<span class="dept">${esc(n.dept)}</span></h2>
       <table><thead><tr><th>หมวดงบ</th><th class="num">ยอดจัดสรร (บาท)</th><th>เลขกิจกรรม</th><th>เปิดใบตัดงบ</th></tr></thead><tbody>`;
@@ -70,7 +98,9 @@ function renderParsed() {
     html += `</tbody></table></div>`;
   }
   html += hasBackend()
-    ? `<button class="btn" id="importBtn">⬆️ นำเข้างบเข้าระบบ</button><div id="importResult"></div>`
+    ? `<div style="text-align:center;margin-top:24px">
+         <button class="btn" id="importBtn" style="font-size:1.15rem;padding:14px 44px">⬆️ นำงบเข้าระบบ</button></div>
+       <div id="importResult"></div>`
     : `<div class="warn" style="margin-top:12px">ℹ️ ยังไม่ได้ตั้งค่า GAS_URL ใน config.js — นำเข้าระบบไม่ได้ (แสดงผลบนจอเท่านั้น)</div>`;
   $('importOut').innerHTML = html;
   if (hasBackend()) $('importBtn').addEventListener('click', () => doImport([]));
@@ -96,7 +126,8 @@ async function doImport(confirmKeys) {
   const btn = $('importBtn'); if (btn) btn.disabled = true;
   $('importResult').innerHTML = '<div class="sub">⏳ กำลังนำเข้า…</div>';
   try {
-    const r = await callApi('importBudget', { fileName: parsed.fileName, budgets: toBudgetRows(), confirmKeys });
+    const workName = $('f-jobName') ? $('f-jobName').value.trim() : '';
+    const r = await callApi('importBudget', { fileName: parsed.fileName, workName, budgets: toBudgetRows(), confirmKeys });
     let html = `<div class="ok">✅ นำเข้าเสร็จ — เพิ่มใหม่ ${r.added.length} | เท่าเดิม(ข้าม) ${r.unchanged} | อัปเดต ${r.updated.length}</div>`;
     if (r.needConfirm && r.needConfirm.length) {
       html += `<div class="card"><b class="warn">⚠️ พบยอดจัดสรรเปลี่ยน — ต้องยืนยันก่อนทับ</b>`;
@@ -108,6 +139,7 @@ async function doImport(confirmKeys) {
       html += `<button class="btn" id="confirmBtn">ยืนยันแก้ยอดที่ติ๊ก</button></div>`;
     }
     $('importResult').innerHTML = html;
+    loadBudgets(); // รีเฟรชรายการงานใน sidebar ให้เห็นงานที่เพิ่งนำเข้า
     const cb = $('confirmBtn');
     if (cb) cb.addEventListener('click', () => {
       const keys = [...document.querySelectorAll('.cf:checked')].map((x) => x.value);
@@ -120,32 +152,281 @@ async function doImport(confirmKeys) {
   }
 }
 
-// ================= View: ก้อนงบ / เปิดใบตัด =================
-$('reloadBudgets').addEventListener('click', loadBudgets);
-
+// ================= โหลดข้อมูล + แสดง panel =================
 async function loadBudgets() {
-  if (!hasBackend()) { $('ledgerOut').innerHTML = '<div class="warn">ยังไม่ได้ตั้งค่า GAS_URL ใน config.js</div>'; return; }
-  $('ledgerOut').innerHTML = '<div class="sub">⏳ กำลังโหลด…</div>';
+  if (!hasBackend()) {
+    setSync(false, 'ยังไม่ได้ตั้งค่า GAS_URL');
+    $('filesOut').innerHTML = '<div class="list-empty">ยังไม่ได้ตั้งค่า GAS_URL ใน config.js</div>';
+    return;
+  }
+  setSync(true, 'กำลังโหลด…');
   try {
     [budgets, settings] = await Promise.all([callApi('getBudgets'), callApi('getSettings')]);
-    renderBudgets();
+    setSync(true, 'เชื่อมต่อฐานข้อมูลแล้ว');
+    updatePendingBadge();
+    renderActivePanel();
   } catch (err) {
-    $('ledgerOut').innerHTML = `<div class="err">โหลดไม่สำเร็จ: ${esc(err.message)}</div>`;
+    setSync(false, 'เชื่อมต่อไม่สำเร็จ');
+    $('filesOut').innerHTML = `<div class="list-empty err">โหลดไม่สำเร็จ: ${esc(err.message)}</div>`;
   }
 }
 
-function renderBudgets() {
-  if (!budgets.length) { $('ledgerOut').innerHTML = '<div class="card">ยังไม่มีก้อนงบ — ไปนำเข้าไฟล์ ZPSR018 ก่อน</div>'; return; }
-  // รายการงาน (WBS) — 1 WBS = 1 งาน; เลือกดูทีละงาน (ค่าเริ่ม = งานแรก)
-  const jobs = [...new Set(budgets.map((b) => b.wbs))];
-  if (!jobs.includes(selectedWbs)) selectedWbs = jobs[0];
+// เรนเดอร์เฉพาะ panel ที่กำลังเปิดอยู่ (หลังโหลดข้อมูลใหม่)
+function renderActivePanel() {
+  if ($('panel-job').classList.contains('active') && selectedWbs) renderDetail();
+  else if ($('panel-pending').classList.contains('active')) renderPending();
+  else if ($('panel-dashboard').classList.contains('active')) renderDashboard();
+  else renderFiles();
+}
+
+function setSync(ok, txt) {
+  $('sync').className = 'sync ' + (ok ? 'on' : 'off');
+  $('syncTxt').textContent = txt;
+}
+
+// รวมยอดต่อแฟ้ม (WBS) — ใช้ทุกหน้า
+function jobStats() {
+  const jobs = {};
+  budgets.forEach((b) => {
+    const j = jobs[b.wbs] || (jobs[b.wbs] = { wbs: b.wbs, cats: 0, alloc: 0, paid: 0, bal: 0, nets: new Set(), created: null });
+    j.cats++; j.alloc += b.allocation; j.paid += b.paid; j.bal += b.balance; j.nets.add(b.network);
+    const d = b.imported ? new Date(b.imported) : null; // วันที่สร้างแฟ้ม = import ครั้งแรกสุด
+    if (d && !isNaN(d) && (!j.created || d < j.created)) j.created = d;
+  });
+  return Object.values(jobs);
+}
+
+const TH_MONTH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const dayKey = (d) => d.toISOString().slice(0, 10); // YYYY-MM-DD สำหรับ sort
+const thaiDay = (d) => `${d.getDate()} ${TH_MONTH[d.getMonth()]} ${d.getFullYear() + 543}`;
+const jobStatus = (j) => (j.paid <= 0 ? 'none' : j.bal <= 0 ? 'done' : 'part'); // ยังไม่ตัด / เบิกครบ / กำลังตัด
+const STATUS_LABEL = { none: 'ยังไม่ตัด', part: 'กำลังตัด', done: 'เบิกครบ' };
+
+// การ์ดแฟ้ม 1 ใบ (ใช้ทั้งหน้าเลือกแฟ้ม + หน้ายังไม่ตัดงบ)
+function fileCard(j) {
+  const pct = j.alloc > 0 ? Math.min(100, (j.paid / j.alloc) * 100) : 0;
+  const st = jobStatus(j);
+  return `<button class="filecard" data-wbs="${esc(j.wbs)}">
+    <div class="fc-top"><span class="fc-wbs">${esc(j.wbs)}</span>
+      <span class="fc-badge ${st}">${STATUS_LABEL[st]}</span></div>
+    <div class="fc-meta">${j.nets.size} โครงข่าย · ${j.cats} หมวดงบ</div>
+    <div class="fc-bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+    <div class="fc-stats"><span>จัดสรร<b>${fmt(j.alloc)}</b></span>
+      <span>คงเหลือ<b class="${j.bal < 0 ? 'err' : ''}">${fmt(j.bal)}</b></span></div></button>`;
+}
+function bindFileCards(root) {
+  root.querySelectorAll('.filecard').forEach((c) => c.addEventListener('click', () => openJob(c.dataset.wbs)));
+}
+
+function updatePendingBadge() {
+  const n = jobStats().filter((j) => jobStatus(j) === 'none').length;
+  $('pendCount').textContent = n || '';
+}
+
+// ---------- หน้า: เลือกแฟ้มงาน (จัดกลุ่มตามวันที่สร้าง) ----------
+function renderFiles() {
+  const jobs = jobStats().filter((j) => j.wbs.toLowerCase().includes(search));
+  if (!jobs.length) {
+    $('filesOut').innerHTML = `<div class="list-empty">${budgets.length ? 'ไม่พบแฟ้มที่ค้นหา' : 'ยังไม่มีแฟ้ม — กด “นำเข้าไฟล์ ZPSR018” เพื่อเพิ่มแฟ้มแรก'}</div>`;
+    return;
+  }
+  const groups = {};
+  jobs.forEach((j) => { const k = j.created ? dayKey(j.created) : '~'; (groups[k] = groups[k] || []).push(j); });
+  const keys = Object.keys(groups).sort((a, b) => (a === '~' ? 1 : b === '~' ? -1 : b.localeCompare(a))); // ใหม่→เก่า, ไม่ระบุไว้ท้าย
+  $('filesOut').innerHTML = keys.map((k) => {
+    const label = k === '~' ? 'ไม่ระบุวันที่' : thaiDay(groups[k][0].created);
+    return `<div class="date-group"><div class="date-head">📅 ${label}</div>
+      <div class="files">${groups[k].map(fileCard).join('')}</div></div>`;
+  }).join('');
+  bindFileCards($('filesOut'));
+}
+
+// ---------- หน้า: แฟ้มที่ยังไม่ตัดงบ ----------
+function renderPending() {
+  const pend = jobStats().filter((j) => jobStatus(j) === 'none');
+  if (!pend.length) { $('pendingOut').innerHTML = '<div class="list-empty">✅ ทุกแฟ้มเริ่มตัดงบแล้ว</div>'; return; }
+  $('pendingOut').innerHTML = `<div class="files">${pend.map(fileCard).join('')}</div>`;
+  bindFileCards($('pendingOut'));
+}
+
+// ---------- ชิ้นส่วนกราฟ (inline SVG/CSS ล้วน — ไม่พึ่ง lib) ----------
+// โดนัท conic-gradient + ตัวเลขกลางวง
+function donut(gradient, v, l) {
+  return `<div class="donut" style="background:${gradient}">
+    <div class="donut-c"><div class="v">${v}</div><div class="l">${l}</div></div></div>`;
+}
+
+// โดนัทสถานะแฟ้ม 3 สี (สี status + legend มี label — ไม่พึ่งสีอย่างเดียว)
+function statusDonut(t) {
+  const total = t.none + t.part + t.done;
+  const a = total ? (t.none / total) * 360 : 0;
+  const b = total ? ((t.none + t.part) / total) * 360 : 0;
+  const grad = total
+    ? `conic-gradient(var(--err) 0 ${a}deg, var(--warn) ${a}deg ${b}deg, var(--ok) ${b}deg 360deg)`
+    : 'conic-gradient(var(--line) 0 360deg)';
+  return donut(grad, total, 'แฟ้ม') + `<div class="legend">
+    <div class="li"><span class="sw" style="background:var(--err)"></span>ยังไม่ตัด<b>${t.none}</b></div>
+    <div class="li"><span class="sw" style="background:var(--warn)"></span>กำลังตัด<b>${t.part}</b></div>
+    <div class="li"><span class="sw" style="background:var(--ok)"></span>เบิกครบ<b>${t.done}</b></div></div>`;
+}
+
+// แท่งแนวนอน: ความยาว ∝ value (งบจัดสรร), ส่วนเข้ม = filled (ตัดไปแล้ว), ส่วนอ่อน = คงเหลือ
+// ponytail: ไม่มี 2px gap ระหว่าง segment (โดนัท/แท่ง) — legend+สีต่างพอแล้ว
+function hbars(items) {
+  const max = items.reduce((m, i) => Math.max(m, i.value), 0) || 1;
+  return `<div class="bars">${items.map((i) => {
+    const w = (i.value / max) * 100, pw = i.value > 0 ? (i.filled / i.value) * 100 : 0;
+    const attrs = i.wbs ? `class="bar-row bar-clickable" data-job="${esc(i.wbs)}"` : 'class="bar-row"';
+    return `<div ${attrs}>
+      <div class="bl"><span>${esc(i.label)}</span><span class="bv">${fmt(i.value)}</span></div>
+      <div class="bar-track" style="width:${w.toFixed(1)}%"><div class="bar-fill" style="width:${pw.toFixed(1)}%"></div></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+const barLegend = `<div class="leg-row">
+  <span><i style="background:var(--primary)"></i>ตัดไปแล้ว</span>
+  <span><i style="background:var(--line)"></i>คงเหลือ</span></div>`;
+
+// โดนัท 2 ใบ (ความคืบหน้า + สถานะ) — ใช้ร่วมทุกโหมด
+function donutsRow(t) {
+  const pct = t.alloc > 0 ? (t.paid / t.alloc) * 100 : 0;
+  return `<div class="dash-charts">
+    <div class="chart-card"><h3>ความคืบหน้าตัดงบรวม</h3>
+      ${donut(`conic-gradient(var(--primary) ${pct.toFixed(1)}%, var(--line) 0)`, `${Math.round(pct)}%`, 'ตัดแล้ว')}
+      <div class="legend">
+        <div class="li"><span class="sw" style="background:var(--primary)"></span>ตัดไปแล้ว<b>${fmt(t.paid)}</b></div>
+        <div class="li"><span class="sw" style="background:var(--line)"></span>คงเหลือ<b>${fmt(t.bal)}</b></div>
+      </div>
+    </div>
+    <div class="chart-card"><h3>สถานะแฟ้มงาน</h3>${statusDonut(t)}</div>
+  </div>`;
+}
+
+// ---------- หน้า: Dashboard (รวม / แยกเดือน / แยกปี) ----------
+function renderDashboard() {
+  const modes = [['sum', 'รวม'], ['month', 'แยกเดือน'], ['year', 'แยกปี']];
+  const seg = `<div class="seg">${modes.map(([m, l]) =>
+    `<button class="${m === dashMode ? 'on' : ''}" data-mode="${m}">${l}</button>`).join('')}</div>`;
+  $('dashOut').innerHTML = seg + (dashMode === 'sum' ? dashSum() : dashByPeriod(dashMode));
+  $('dashOut').querySelector('.seg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mode]'); if (b) { dashMode = b.dataset.mode; renderDashboard(); }
+  });
+  $('dashOut').querySelectorAll('[data-job]').forEach((el) =>
+    el.addEventListener('click', () => openJob(el.dataset.job)));
+}
+
+// ยอดรวมทั้งหมด (KPI)
+function dashSum() {
+  const jobs = jobStats();
+  const t = periodTotal(jobs);
+  const pct = t.alloc > 0 ? (t.paid / t.alloc) * 100 : 0;
+  return `<div class="kpis">
+      <div class="kpi"><div class="v">${jobs.length}</div><div class="l">แฟ้มงานทั้งหมด</div></div>
+      <div class="kpi"><div class="v">${fmt(t.alloc)}</div><div class="l">งบจัดสรรรวม</div></div>
+      <div class="kpi"><div class="v">${fmt(t.paid)}</div><div class="l">ตัดไปแล้ว (${Math.round(pct)}%)</div></div>
+      <div class="kpi ${t.bal < 0 ? 'err' : 'ok'}"><div class="v">${fmt(t.bal)}</div><div class="l">คงเหลือ</div></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi err"><div class="v">${t.none}</div><div class="l">ยังไม่ตัดงบ</div></div>
+      <div class="kpi"><div class="v" style="color:var(--warn)">${t.part}</div><div class="l">กำลังตัด</div></div>
+      <div class="kpi ok"><div class="v">${t.done}</div><div class="l">เบิกครบแล้ว</div></div>
+      <div class="kpi"><div class="v">${jobs.reduce((s, j) => s + j.cats, 0)}</div><div class="l">หมวดงบรวม</div></div>
+    </div>
+    ${donutsRow(t)}
+    ${topCard(jobs)}`;
+}
+
+// การ์ดแท่ง Top แฟ้มงบสูงสุด (คลิกแท่ง = เข้าแฟ้ม)
+function topCard(jobs) {
+  const top = jobs.slice().sort((a, b) => b.alloc - a.alloc).slice(0, 8);
+  if (!top.length) return '';
+  return `<div class="chart-card"><h3>แฟ้มงบสูงสุด (Top ${top.length})</h3>${barLegend}
+    ${hbars(top.map((j) => ({ label: j.workName || j.wbs, value: j.alloc, filled: j.paid, wbs: j.wbs })))}</div>`;
+}
+
+// สรุปตามงวด (เดือน/ปี ของวันที่สร้างแฟ้ม)
+function dashByPeriod(mode) {
+  const buckets = {};
+  jobStats().forEach((j) => {
+    const key = !j.created ? '~' : mode === 'year' ? String(j.created.getFullYear())
+      : `${j.created.getFullYear()}-${String(j.created.getMonth() + 1).padStart(2, '0')}`;
+    (buckets[key] = buckets[key] || []).push(j);
+  });
+  const keys = Object.keys(buckets).sort((a, b) => (a === '~' ? 1 : b === '~' ? -1 : b.localeCompare(a)));
+  const periodLabel = (k, j) => k === '~' ? 'ไม่ระบุวันที่'
+    : mode === 'year' ? `พ.ศ. ${+k + 543}` : `${TH_MONTH[j.created.getMonth()]} ${j.created.getFullYear() + 543}`;
+
+  let rows = '';
+  keys.forEach((k) => {
+    const t = periodTotal(buckets[k]);
+    rows += `<tr><td>${esc(periodLabel(k, buckets[k][0]))}</td><td class="num">${buckets[k].length}</td>
+      <td class="num">${fmt(t.alloc)}</td><td class="num">${fmt(t.paid)}</td>
+      <td class="num ${t.bal < 0 ? 'err' : ''}">${fmt(t.bal)}</td>
+      <td class="num ${t.none ? 'err' : ''}">${t.none || '—'}</td></tr>`;
+  });
+  const g = periodTotal(jobStats());
+  const foot = `<tr style="font-weight:700;background:var(--surface-soft)"><td>รวมทั้งหมด</td><td class="num">${jobStats().length}</td>
+    <td class="num">${fmt(g.alloc)}</td><td class="num">${fmt(g.paid)}</td>
+    <td class="num ${g.bal < 0 ? 'err' : ''}">${fmt(g.bal)}</td><td class="num">${g.none || '—'}</td></tr>`;
+
+  const chartItems = keys.map((k) => {
+    const t = periodTotal(buckets[k]);
+    return { label: periodLabel(k, buckets[k][0]), value: t.alloc, filled: t.paid };
+  });
+  const chart = `<div class="chart-card"><h3>ตัดไปแล้ว vs คงเหลือ ราย${mode === 'year' ? 'ปี' : 'เดือน'}</h3>
+    ${barLegend}${hbars(chartItems)}</div>`;
+
+  return donutsRow(g) + chart + `<div class="net"><table>
+    <thead><tr><th>${mode === 'year' ? 'ปี' : 'เดือน'}</th><th class="num">แฟ้ม</th>
+      <th class="num">จัดสรร</th><th class="num">ตัดไปแล้ว</th><th class="num">คงเหลือ</th><th class="num">ยังไม่ตัด</th></tr></thead>
+    <tbody>${rows}${foot}</tbody></table></div>`;
+}
+
+// รวมยอด + นับสถานะ จากชุดแฟ้ม
+function periodTotal(jobs) {
+  const t = { alloc: 0, paid: 0, bal: 0, none: 0, part: 0, done: 0 };
+  jobs.forEach((j) => { t.alloc += j.alloc; t.paid += j.paid; t.bal += j.bal; t[jobStatus(j)]++; });
+  return t;
+}
+
+// เข้าหน้ารายละเอียดแฟ้มที่เลือก
+function openJob(wbs) {
+  selectedWbs = wbs;
+  showPanel('job');
+  renderDetail();
+}
+
+function renderDetail() {
   const shown = budgets.filter((b) => b.wbs === selectedWbs);
+  if (!shown.length) { $('detailOut').innerHTML = '<div class="card">ไม่พบก้อนงบของงานนี้</div>'; return; }
+  const j = jobStats().find((x) => x.wbs === selectedWbs);
+  const pct = j.alloc > 0 ? Math.min(100, (j.paid / j.alloc) * 100) : 0;
+  const gc = j.bal < 0 ? 'var(--err)' : 'var(--primary)';
 
-  let html = `<div class="jobbar"><label>งาน (WBS)</label>
-    <select id="jobSel">${jobs.map((w) => `<option ${w === selectedWbs ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select>
-    <span class="jobcount">${jobs.length} งานในระบบ</span></div>`;
+  // ปุ่มย้อนกลับ + หัวเรื่อง + เกจ %เบิกแล้ว
+  let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button>
+    <button class="btn sec" id="delFile" style="margin-left:auto;color:var(--err)">🗑️ ลบแฟ้ม</button></div>
+  <div class="detail-head">
+    <div style="flex:1">
+      <div class="dh-kicker">หมายเลขงาน (WBS)</div>
+      <div class="dh-title">${esc(selectedWbs)}</div>
+      <div class="chips"><span class="chip">${j.nets.size} โครงข่าย</span><span class="chip">${j.cats} หมวดงบ</span></div>
+    </div>
+    <div class="gauge" style="--pct:${pct.toFixed(1)};--gc:${gc}">
+      <div class="g-v">${Math.round(pct)}%</div><div class="g-l">เบิกแล้ว</div></div>
+  </div>`;
 
-  // จัดกลุ่มตามโครงข่าย (เฉพาะงานที่เลือก)
+  // KPI 4 ช่อง
+  html += `<div class="kpis">
+    <div class="kpi"><div class="v">${fmt(j.alloc)}</div><div class="l">ยอดจัดสรรรวม</div></div>
+    <div class="kpi"><div class="v">${fmt(j.paid)}</div><div class="l">จ่ายแล้วรวม</div></div>
+    <div class="kpi ${j.bal < 0 ? 'err' : 'ok'}"><div class="v">${fmt(j.bal)}</div><div class="l">คงเหลือ</div></div>
+    <div class="kpi"><div class="v">${shown.filter((b) => b.balance > 0).length}/${shown.length}</div><div class="l">หมวดเปิดใบได้</div></div>
+  </div>`;
+
+  // ตารางงบตามโครงข่าย
   const byNet = {};
   shown.forEach((b) => { (byNet[b.network + '|' + b.dept] = byNet[b.network + '|' + b.dept] || []).push(b); });
   for (const grp of Object.keys(byNet)) {
@@ -158,17 +439,65 @@ function renderBudgets() {
       html += `<tr><td>${esc(b.category)}</td><td class="act">${esc(b.act)}</td>
         <td class="num">${fmt(b.allocation)}</td><td class="num">${fmt(b.paid)}</td>
         <td class="num ${b.balance < 0 ? 'err' : ''}">${fmt(b.balance)}</td>
-        <td><button class="btn sec" data-sum="${i}">สรุป/งวด</button>
-          <button class="btn sec" data-cut="${i}" ${canCut ? '' : 'disabled'}>เปิดใบตัด</button></td></tr>`;
+        <td><div class="row-actions"><button class="btn sec" data-sum="${i}">สรุป/งวด</button>
+          <button class="btn sec" data-cut="${i}" ${canCut ? '' : 'disabled'}>เปิดใบตัด</button></div></td></tr>`;
     }
     html += `</tbody></table></div>`;
   }
-  $('ledgerOut').innerHTML = html;
-  $('jobSel').addEventListener('change', (e) => { selectedWbs = e.target.value; renderBudgets(); });
+  $('detailOut').innerHTML = html;
+  $('backFiles').addEventListener('click', () => goPanel('files'));
+  $('delFile').addEventListener('click', () => askDeleteFile(selectedWbs));
   document.querySelectorAll('[data-cut]').forEach((btn) =>
     btn.addEventListener('click', () => openSlip(budgets[+btn.dataset.cut])));
   document.querySelectorAll('[data-sum]').forEach((btn) =>
     btn.addEventListener('click', () => openSummary(budgets[+btn.dataset.sum])));
+}
+
+// ---------- ลบแฟ้มงาน (ยืนยัน 2 ชั้น + รหัสผ่าน) ----------
+function askDeleteFile(wbs) {
+  const shown = budgets.filter((b) => b.wbs === wbs);
+  const hasCut = shown.some((b) => b.paid > 0);
+  $('modalBox').innerHTML = `<h3>⚠️ ลบแฟ้มงาน</h3>
+    <div class="sub">หมายเลขงาน (WBS) <b>${esc(wbs)}</b></div>
+    <div class="warn" style="margin:12px 0">จะลบก้อนงบ ${shown.length} หมวด${hasCut ? ' + ใบตัดทุกใบของแฟ้มนี้' : ''} ออกถาวร — กู้คืนไม่ได้</div>
+    <div class="modal-actions">
+      <button class="btn sec" id="delCancel">ยกเลิก</button>
+      <button class="btn" id="delNext" style="background:var(--err)">ดำเนินการต่อ →</button>
+    </div>`;
+  $('modal').classList.add('show');
+  $('delCancel').addEventListener('click', closeModal);
+  $('delNext').addEventListener('click', () => askDeletePassword(wbs));
+}
+
+function askDeletePassword(wbs) {
+  $('modalBox').innerHTML = `<h3>🔒 ยืนยันการลบ</h3>
+    <div class="sub">ใส่รหัสผ่านเพื่อลบแฟ้ม <b>${esc(wbs)}</b> ถาวร</div>
+    <div class="field" style="margin-top:12px"><label>รหัสผ่าน</label>
+      <input type="password" id="delPw" autocomplete="off"></div>
+    <div id="delErr" class="err"></div>
+    <div class="modal-actions">
+      <button class="btn sec" id="delCancel2">ยกเลิก</button>
+      <button class="btn" id="delDo" style="background:var(--err)">🗑️ ลบถาวร</button>
+    </div>`;
+  $('delCancel2').addEventListener('click', closeModal);
+  $('delDo').addEventListener('click', () => doDeleteFile(wbs));
+  $('delPw').focus();
+}
+
+async function doDeleteFile(wbs) {
+  if ($('delPw').value !== '509758') { $('delErr').textContent = 'รหัสผ่านไม่ถูกต้อง'; return; }
+  const btn = $('delDo'); btn.disabled = true; $('delErr').textContent = '';
+  try {
+    const r = await callApi('deleteFile', { wbs, password: $('delPw').value });
+    closeModal();
+    goPanel('files');
+    await loadBudgets();
+    $('filesOut').insertAdjacentHTML('afterbegin',
+      `<div class="flash ok">🗑️ ลบแฟ้ม ${esc(wbs)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`);
+  } catch (err) {
+    btn.disabled = false;
+    $('delErr').textContent = err.message;
+  }
 }
 
 // ---------- หน้าสรุปงบต่อคีย์ + ออก PDF (modal) ----------
@@ -189,8 +518,7 @@ async function openSummary(b) {
     slips.forEach((s) => {
       html += `<tr><td>${esc(s.slipNo)}</td><td>${esc(s.date)}</td>
         <td class="num">${fmt(s.payNow)}</td><td class="num">${fmt(s.balance)}</td>
-        <td>${s.pdf ? `<a href="${esc(s.pdf)}" target="_blank">เปิด</a>`
-                    : `<button class="btn sec" data-pdf="${esc(s.slipNo)}">ออก PDF</button>`}</td></tr>`;
+        <td><button class="btn sec" data-pdf="${esc(s.slipNo)}">ออก PDF</button></td></tr>`;
     });
     $('sumList').innerHTML = html + '</tbody></table>';
     document.querySelectorAll('[data-pdf]').forEach((btn) =>
@@ -205,9 +533,10 @@ async function makePdf(btn) {
   try {
     const r = await callApi('makePdf', { slipNo: btn.dataset.pdf });
     const a = document.createElement('a');
-    a.href = r.url; a.target = '_blank'; a.textContent = 'เปิด';
-    btn.replaceWith(a);
-    window.open(r.url, '_blank');
+    a.href = 'data:application/pdf;base64,' + r.b64;
+    a.download = r.filename;
+    a.click();
+    btn.disabled = false; btn.textContent = 'ออก PDF';
   } catch (err) {
     btn.disabled = false; btn.textContent = 'ออก PDF';
     alert('ออก PDF ไม่สำเร็จ: ' + err.message);
@@ -221,9 +550,10 @@ function openSlip(b) {
   $('modalBox').innerHTML = `
     <h3>เปิดใบตัดงบ</h3>
     <div class="sub">${esc(b.category)} • เลขกิจกรรม <span class="mono">${esc(b.act)}</span> • โครงข่าย ${esc(b.network)}</div>
-    <div class="field"><label>ชื่องาน</label><input id="f-workName"></div>
+    <div class="field"><label>ชื่องาน</label><input id="f-workName" value="${esc(b.workName || '')}"></div>
     <div class="field"><label>ผู้เบิก</label><input id="f-requester"></div>
     <div class="field"><label>ตำแหน่ง/ที่อยู่</label><input id="f-position"></div>
+    <div class="field"><label>ประกอบใบสำคัญจ่ายเลขที่</label><input id="f-ref"></div>
     <div class="field"><label>ชื่อ พขร.</label>
       <select id="f-driver"><option value="">— เลือก —</option>${drivers.map((d) => `<option>${esc(d)}</option>`).join('')}</select></div>
     <div class="field"><label>สัญญาจ้างเลขที่</label><input id="f-contract"></div>
@@ -263,11 +593,11 @@ async function submitSlip(b) {
     const r = await callApi('createSlip', {
       key: b.key, payNow,
       workName: val('f-workName'), requester: val('f-requester'), position: val('f-position'),
-      driver: val('f-driver'), contract: val('f-contract'), slipDate: val('f-slipDate'),
+      driver: val('f-driver'), contract: val('f-contract'), slipDate: val('f-slipDate'), ref: val('f-ref'),
     });
     closeModal();
-    $('ledgerOut').insertAdjacentHTML('afterbegin',
-      `<div class="ok">✅ บันทึกใบตัดเลขที่ ${r.slipNo} — คงเหลือใหม่ ${fmt(r.balance)}</div>`);
+    $('detailOut').insertAdjacentHTML('afterbegin',
+      `<div class="flash ok">✅ บันทึกใบตัดเลขที่ ${r.slipNo} — คงเหลือใหม่ ${fmt(r.balance)}</div>`);
     loadBudgets();
   } catch (err) {
     // server เป็นคนตัดสิน (กันเบิกเกิน/แข่งกันเบิก) — โชว์เหตุผลจาก server
@@ -275,3 +605,6 @@ async function submitSlip(b) {
     btn.disabled = false;
   }
 }
+
+// โหลดรายการงานทันทีที่เปิดแอป (หน้าหลักเป็นค่าเริ่มต้น)
+loadBudgets();
