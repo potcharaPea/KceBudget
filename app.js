@@ -914,7 +914,16 @@ async function submitSlip(b) {
     });
     flashCutKey = b.key; // ให้แถวที่เพิ่งตัดไฮไลต์หลัง re-render
     closeModal();
-    await loadBudgets(); // รอ re-render เสร็จ แถวถึงไฮไลต์ + flash ไม่โดนล้าง
+    // เร็วขึ้น: อัปเดตยอดจากที่ server คืน (paid/balance ของหมวดนี้) แล้ว re-render เลย
+    // ไม่ต้องยิง getBudgets/getSettings ซ้ำ (เดิมโหลดใหม่ทั้งหมด = ช้า 2 คำขอ)
+    const bud = budgets.find((x) => x.key === b.key);
+    if (bud && r.paid != null) {
+      bud.paid = r.paid; bud.balance = r.balance;
+      updatePendingBadge();
+      renderActivePanel(); // เรนเดอร์ detailOut ใหม่ก่อน แล้วค่อยแทรก flash
+    } else {
+      await loadBudgets(); // เคส duplicate (retry ซ้ำ) server ไม่คืน paid → โหลดใหม่ให้ชัวร์
+    }
     $('detailOut').insertAdjacentHTML('afterbegin',
       `<div class="flash ok">${ic('check')}บันทึกใบตัดเลขที่ ${r.slipNo} — คงเหลือใหม่ ${fmt(r.balance)}</div>`);
   } catch (err) {
