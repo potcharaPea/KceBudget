@@ -54,7 +54,17 @@ function validateSlip(balance, payNow) {
   return { ok: true };
 }
 
+// กันตัดรวมทั้งงานเกินยอดจัดสรรรวม — ทุกหมวดของ WBS รวมกันต้องไม่เกิน wbsTotal
+// wbsTotal = null/'' → ยังไม่ตั้งยอด ไม่บังคับเพดาน
+function validateWbsCap(wbsTotal, wbsPaid, payNow) {
+  if (wbsTotal === null || wbsTotal === undefined || wbsTotal === '') return { ok: true };
+  if (cents(Number(wbsPaid) + Number(payNow)) > cents(wbsTotal)) {
+    return { ok: false, reason: 'ตัดรวมทั้งงานเกินยอดจัดสรรรวม (' + round2(wbsTotal).toFixed(2) + ' บาท) — ตัดได้อีก ' + round2(wbsTotal - wbsPaid).toFixed(2) + ' บาท' };
+  }
+  return { ok: true };
+}
+
 // export สำหรับเทสใน Node เท่านั้น (GAS ไม่มี module → เงื่อนไขนี้ข้ามไป)
 if (typeof module !== 'undefined') {
-  module.exports = { budgetKey: budgetKey, cents: cents, round2: round2, sumPaid: sumPaid, classifyReimport: classifyReimport, validateSlip: validateSlip };
+  module.exports = { budgetKey: budgetKey, cents: cents, round2: round2, sumPaid: sumPaid, classifyReimport: classifyReimport, validateSlip: validateSlip, validateWbsCap: validateWbsCap };
 }

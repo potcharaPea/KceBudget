@@ -196,7 +196,11 @@
   .seg button.on { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
   /* ---------- KPI ---------- */
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 16px 0; }
+  .wbs-total { display: flex; align-items: center; gap: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 22px; box-shadow: var(--shadow); margin: 16px 0; }
+  .wbs-total > div { flex: 1; }
+  .wbs-total .l { font-size: 12px; color: var(--muted); display: block; }
+  .wbs-total .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 16px 0; }
   .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 17px 20px; box-shadow: var(--shadow); }
   .kpi .v { font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
   .kpi .l { font-size: 12px; color: var(--muted); margin-top: 5px; }
@@ -267,6 +271,15 @@
   .balrow b { font-variant-numeric: tabular-nums; color: var(--ink); }
   .balrow.big { font-size: 17px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; color: var(--ink); font-weight: 600; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  /* รายการค่าใช้จ่ายหน้างาน (checkbox หน้างาน) */
+  .chklist { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border: 1px solid var(--input-bd); border-radius: 8px; }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); margin: 0; font-weight: 400; cursor: pointer; }
+  .field .chk input[type=checkbox] { width: auto; padding: 0; margin: 0; flex: none; }
+  .chk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .chk-row .chk { flex: none; }
+  .inl { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .field .drv { width: auto; flex: 1; min-width: 150px; padding: 7px 10px; }
+  .field .sm { width: auto; padding: 7px 10px; min-width: 90px; }
 
   /* ---------- mobile ---------- */
   @media (max-width: 820px) {
@@ -341,9 +354,9 @@
       <section id="panel-import" class="panel">
         <div class="page-head"><h2>นำเข้าไฟล์ ZPSR018</h2><p>ลากไฟล์งบมาวางเพื่ออ่านและนำเข้าระบบ</p></div>
         <label id="drop">
-          <input type="file" id="file" accept="application/pdf">
+          <input type="file" id="file" accept="application/pdf" multiple>
           <div class="drop-title">ลากไฟล์ ZPSR018 มาวาง</div>
-          <div class="drop-hint">หรือ <span class="drop-btn">เลือกไฟล์ .pdf</span> เพื่ออัพโหลด</div>
+          <div class="drop-hint">หรือ <span class="drop-btn">เลือกไฟล์ .pdf</span> — เลือกได้หลายไฟล์พร้อมกัน</div>
         </label>
         <div id="importOut"></div>
       </section>

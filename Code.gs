@@ -19,8 +19,16 @@ function setup() {
               : SpreadsheetApp.create('ใบตัดงบ กฟส.คำชะอี — ฐานข้อมูล');
   if (!id) PROP.setProperty(SHEET_ID_KEY, ss.getId());
 
-  ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง', 'ชื่องาน']);
-  ensureTab_(ss, TABS.ledger, ['เลขที่ใบ', 'คีย์งบ', 'วันที่ตัด', 'จ่ายครั้งนี้', 'คงเหลือหลังตัด', 'ชื่องาน', 'ผู้เบิก', 'ตำแหน่ง', 'ชื่อ พขร.', 'สัญญาจ้าง', 'เลขใบสำคัญจ่าย', 'ผู้ทำรายการ', 'timestamp']);
+  ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง', 'ชื่องาน', 'ยอดจัดสรรรวม']);
+  // migrate ชีตที่ deploy ไปแล้ว — เติมหัวคอลัมน์ยอดจัดสรรรวม (คอลัมน์ 11) ถ้ายังไม่มี
+  var bSh = ss.getSheetByName(TABS.budget);
+  if (bSh.getRange(1, 11).getValue() !== 'ยอดจัดสรรรวม') bSh.getRange(1, 11).setValue('ยอดจัดสรรรวม');
+  ensureTab_(ss, TABS.ledger, ['เลขที่ใบ', 'คีย์งบ', 'วันที่ตัด', 'จ่ายครั้งนี้', 'คงเหลือหลังตัด', 'ชื่องาน', 'ผู้เบิก', 'ตำแหน่ง', 'ชื่อ พขร.', 'สัญญาจ้าง', 'เลขใบสำคัญจ่าย', 'ผู้ทำรายการ', 'timestamp', 'clientId', 'ลว.สัญญา', 'รายละเอียด']);
+  // migrate — เติมหัวคอลัมน์ clientId (14) + ลว.สัญญา (15) + รายละเอียด JSON (16) ถ้ายังไม่มี
+  var ledSh0 = ss.getSheetByName(TABS.ledger);
+  if (ledSh0.getRange(1, 14).getValue() !== 'clientId') ledSh0.getRange(1, 14).setValue('clientId');
+  if (ledSh0.getRange(1, 15).getValue() !== 'ลว.สัญญา') ledSh0.getRange(1, 15).setValue('ลว.สัญญา');
+  if (ledSh0.getRange(1, 16).getValue() !== 'รายละเอียด') ledSh0.getRange(1, 16).setValue('รายละเอียด');
   ensureTab_(ss, TABS.revision, ['คีย์งบ', 'ยอดเก่า', 'ยอดใหม่', 'วันที่', 'หมายเหตุ', 'ผู้แก้']);
   ensureTab_(ss, TABS.settings, ['ประเภท', 'ค่า']);
   // ใส่ตัวอย่างประเภท พขร. ถ้าแท็บตั้งค่ายังว่าง
@@ -59,7 +67,9 @@ function doPost(e) {
       case 'getSlips': result = apiGetSlips_(data.key); break;
       case 'makePdf': result = apiMakePdf_(data.slipNo); break;
       case 'deleteFile': result = apiDeleteFile_(data); break;
-      case 'addDriver': result = apiAddDriver_(data.name); break;
+      case 'addDriver': result = apiAddSetting_('พขร.', data.name); break;
+      case 'addRequester': result = apiAddSetting_('ผู้เบิก', data.name); break;
+      case 'setWbsTotal': result = apiSetWbsTotal_(data); break;
       default: throw new Error('ไม่รู้จัก action: ' + req.action);
     }
     return json_({ ok: true, result: result });
@@ -98,6 +108,7 @@ function apiGetBudgets_() {
       key: r[0], wbs: r[1], network: r[2], dept: r[3], category: r[4], act: String(r[0]).split('|')[2],
       allocation: allocation, paid: paid, balance: round2(allocation - paid),
       workName: r[9] || '', // ชื่องาน (กรอกครั้งเดียวตอน import → prefill ตอนเปิดใบตัด)
+      wbsTotal: (r[10] === '' || r[10] === undefined || r[10] === null) ? null : Number(r[10]), // ยอดจัดสรรรวมทั้ง WBS
       imported: r[7] ? new Date(r[7]).toISOString() : '', // วันที่ import (ใช้จัดกลุ่มแฟ้มตามวันที่สร้าง)
     };
   });
@@ -115,13 +126,13 @@ function apiGetSettings_() {
   return out;
 }
 
-// เพิ่มชื่อ พขร. ลงแท็บตั้งค่า (กันซ้ำ) → คืนรายชื่อล่าสุดให้ dropdown
-function apiAddDriver_(name) {
+// เพิ่มค่าลงแท็บตั้งค่าตามประเภท (พขร./ผู้เบิก) กันซ้ำ → คืนรายชื่อล่าสุดของประเภทนั้นให้ dropdown
+function apiAddSetting_(type, name) {
   name = String(name || '').trim();
-  if (!name) throw new Error('ยังไม่ได้ใส่ชื่อ พขร.');
-  var existing = apiGetSettings_()['พขร.'] || [];
-  if (existing.indexOf(name) < 0) ss_().getSheetByName(TABS.settings).appendRow(['พขร.', name]);
-  return apiGetSettings_()['พขร.'] || [];
+  if (!name) throw new Error('ยังไม่ได้ใส่ชื่อ');
+  var existing = apiGetSettings_()[type] || [];
+  if (existing.indexOf(name) < 0) ss_().getSheetByName(TABS.settings).appendRow([type, name]);
+  return apiGetSettings_()[type] || [];
 }
 
 // นำเข้างบ + จัดการ re-import (4.5)
@@ -141,12 +152,18 @@ function apiImportBudget_(data) {
     (data.confirmKeys || []).forEach(function (k) { confirm[k] = true; });
     var now = new Date();
     var user = Session.getActiveUser().getEmail();
+    // ยอดจัดสรรรวมทั้ง WBS (ดึงจากบรรทัดสรุป best-effort — null ถ้าไฟล์นี้ไม่มีบรรทัด → กรอกมือทีหลัง)
+    var wbsTotal = (data.wbsTotal === null || data.wbsTotal === undefined || data.wbsTotal === '') ? '' : Number(data.wbsTotal);
 
     // เพิ่มคีย์ใหม่
     cls.toAdd.forEach(function (b) {
       // นำหน้า act ด้วย ' บังคับ Sheet เก็บเป็น text ไม่ตัด leading zero (คอลัมน์เลขกิจกรรมโชว์ 0020)
-      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '']);
+      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '', wbsTotal]);
     });
+
+    // เติมยอดจัดสรรรวมให้ทุกแถวของ WBS นี้ (กรณี re-import ไฟล์สรุปหลังไฟล์อื่น) — เฉพาะเมื่อดึงได้
+    var wbs = (data.budgets && data.budgets[0]) ? data.budgets[0].wbs : '';
+    if (wbsTotal !== '' && wbs) setColForWbs_(bTab.sh, wbs, 11, wbsTotal);
 
     // อัปเดตที่ยืนยันแล้ว + log ประวัติแก้งบ (ledger เดิมไม่แตะ)
     var revSh = ss_().getSheetByName(TABS.revision);
@@ -206,6 +223,33 @@ function deleteRowsWhere_(sh, pred) {
   return n;
 }
 
+// แก้ยอดจัดสรรรวมทั้ง WBS ด้วยมือ (กรณีดึง auto ไม่ได้ หรือต้องการแก้) → อัปเดตทุกแถวของ WBS นั้น
+// data = { wbs, total }
+function apiSetWbsTotal_(data) {
+  var wbs = data.wbs;
+  var total = Number(data.total);
+  if (!wbs) throw new Error('ไม่ระบุหมายเลขงาน (WBS)');
+  if (isNaN(total) || total < 0) throw new Error('ยอดจัดสรรรวมไม่ถูกต้อง');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var n = setColForWbs_(ss_().getSheetByName(TABS.budget), wbs, 11, total);
+    if (!n) throw new Error('ไม่พบก้อนงบของ WBS: ' + wbs);
+    return { wbs: wbs, total: total, rows: n };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// เซ็ตค่าใน 1 คอลัมน์ให้ทุกแถวที่ WBS (คอลัมน์ 2) ตรง — คืนจำนวนแถวที่แก้
+function setColForWbs_(sh, wbs, col, val) {
+  var v = sh.getDataRange().getValues(), n = 0;
+  for (var i = 1; i < v.length; i++) {
+    if (v[i][1] === wbs) { sh.getRange(i + 1, col).setValue(val); n++; }
+  }
+  return n;
+}
+
 function updateAllocation_(sh, key, newVal, now, fileName) {
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -224,15 +268,32 @@ function apiCreateSlip_(data) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    // idempotent: ถ้า clientId นี้เคยบันทึกแล้ว (retry หลัง response หายเป็น HTML) → คืนใบเดิม ไม่เขียนซ้ำ
+    if (data.clientId) {
+      var lv = rows_(TABS.ledger).values;
+      for (var d = 0; d < lv.length; d++) {
+        if (String(lv[d][13]) === String(data.clientId)) {
+          return { slipNo: lv[d][0], paid: null, balance: Number(lv[d][4]), duplicate: true };
+        }
+      }
+    }
+
     var budgets = apiGetBudgets_();
     var bud = null;
     for (var i = 0; i < budgets.length; i++) if (budgets[i].key === data.key) { bud = budgets[i]; break; }
     if (!bud) throw new Error('ไม่พบก้อนงบ: ' + data.key);
 
-    var v = validateSlip(bud.balance, data.payNow); // กันเบิกเกิน (4.4) ฝั่ง server
+    var v = validateSlip(bud.balance, data.payNow); // กันเบิกเกินรายหมวด (4.4) ฝั่ง server
     if (!v.ok) throw new Error(v.reason);
 
     var payNow = Number(data.payNow);
+
+    // เพดานระดับทั้งงาน: ตัดรวมทุกหมวดต้องไม่เกินยอดจัดสรรรวมทั้งงาน (ถ้าตั้งยอดไว้)
+    var wbsPaid = 0;
+    for (var k = 0; k < budgets.length; k++) if (budgets[k].wbs === bud.wbs) wbsPaid += budgets[k].paid;
+    var cap = validateWbsCap(bud.wbsTotal, round2(wbsPaid), payNow);
+    if (!cap.ok) throw new Error(cap.reason);
+
     var newBalance = round2(bud.balance - payNow);
     var ledSh = ss_().getSheetByName(TABS.ledger);
     var slipNo = nextSlipNo_(ledSh); // max+1 (กัน slipNo ซ้ำหลังลบแฟ้ม — ไม่พึ่งจำนวนแถว)
@@ -240,8 +301,9 @@ function apiCreateSlip_(data) {
     ledSh.appendRow([
       slipNo, data.key, data.slipDate || new Date(), payNow, newBalance,
       data.workName || '', data.requester || '', data.position || '',
-      data.driver || '', data.contract || '', data.ref || '', // เลขใบสำคัญจ่าย (กรอกในแอป)
-      Session.getActiveUser().getEmail(), new Date(),
+      data.driver || '', data.contract || '', data.ref || '', // สัญญาจ้าง=CON_NO, เลขใบสำคัญจ่าย
+      Session.getActiveUser().getEmail(), new Date(), data.clientId || '', // clientId กันตัดซ้ำ
+      data.conDate || '', data.extra || '', // 15 ลว.สัญญา, 16 รายละเอียด (JSON checkbox+ชื่อ/งวด/ทีม)
     ]);
     return { slipNo: slipNo, paid: round2(bud.paid + payNow), balance: newBalance };
   } finally {
@@ -251,12 +313,24 @@ function apiCreateSlip_(data) {
 
 // ---------- Phase 3: สรุปงวด + ออกใบตัดงบ PDF ----------
 
-// ทุกงวด (ใบตัด) ของคีย์งบเดียว — สำหรับหน้าสรุป + ปุ่มออก PDF
+// งวดระดับแฟ้ม: อันดับใบตัด (เรียงตามเลขใบ = ตามเวลา) ในบรรดาใบทุกคีย์ของ WBS เดียวกัน เริ่มที่ 1
+// slipNo เป็น id ทั้ง ledger (5,6,...) แต่ผู้ใช้อยากเห็นงวดของแต่ละแฟ้มเริ่มที่ 1 → แยกเลขงวดออกจาก id
+function periodMap_(ledgerValues, wbs) {
+  var m = {};
+  ledgerValues.filter(function (r) { return String(r[1]).split('|')[0] === wbs; })
+    .sort(function (a, b) { return Number(a[0]) - Number(b[0]); })
+    .forEach(function (r, i) { m[r[0]] = i + 1; });
+  return m;
+}
+
+// ทุกงวด (ใบตัด) ของคีย์งบเดียว — สำหรับหน้าสรุป + ปุ่มออก PDF (period = งวดของแฟ้ม, slipNo = id ภายใน)
 function apiGetSlips_(key) {
-  return rows_(TABS.ledger).values
+  var vals = rows_(TABS.ledger).values;
+  var period = periodMap_(vals, String(key).split('|')[0]);
+  return vals
     .filter(function (r) { return r[1] === key; })
     .map(function (r) {
-      return { slipNo: r[0], date: fmtDate_(r[2]), payNow: Number(r[3]), balance: Number(r[4]),
+      return { slipNo: r[0], period: period[r[0]], date: fmtDate_(r[2]), payNow: Number(r[3]), balance: Number(r[4]),
                workName: r[5], requester: r[6] };
     });
 }
@@ -288,18 +362,31 @@ function apiMakePdf_(slipNo) {
   var bottom = splitMoney_(Number(row[4]));
   var dp = thaiDateParts_(row[2]);
 
+  // รายละเอียด checkbox หน้างาน (JSON คอลัมน์ 16) — submit เคลียร์รายละเอียดที่ไม่ติ๊กไว้แล้ว
+  var extra = {};
+  try { extra = row[15] ? JSON.parse(row[15]) : {}; } catch (e) { extra = {}; }
+  var chk = extra.chk || {};
+  function ck_(on) { return on ? '(✓)' : '(    )'; }
+
   // คีย์ = โค้ดใน template (ปีกกาเดี่ยว {CODE})
   var map = {
     REF: row[10] || '', JOB: row[5], WBS: bud.wbs,
     DD: dp.day, MM: dp.month, YY: dp.year,
     USR: row[6], POS: row[7],
-    APV: '', APD: '',
+    APV: extra.apv || '', // อนุมัติที่ (กรอกในแอป) — APD ตั้งด้านล่าง (format วันที่ไทย)
     DPT: bud.dept, CAT: bud.category, NET: bud.network, ACT: bud.act,
     YB: alloc.baht, YS: alloc.sat,
     JB: paid.baht, JS: paid.sat,
     KB: top.baht, KS: top.sat,
     CB: now.baht, CS: now.sat,
     LB: bottom.baht, LS: bottom.sat,
+    // 8 checkbox หน้างาน + รายละเอียดของช่องที่ติ๊ก
+    CHK_VEH: ck_(chk.VEH), CHK_TRV: ck_(chk.TRV), CHK_CRN: ck_(chk.CRN), CHK_CRT: ck_(chk.CRT),
+    CHK_DLY: ck_(chk.DLY), CHK_CON: ck_(chk.CON), CHK_OIL: ck_(chk.OIL), CHK_OTH: ck_(chk.OTH),
+    CRN_NAME: extra.crnName || '', CRT_NAME: extra.crtName || '',
+    DLY_DATE: extra.dlyDate || '', DLY_TEAM: extra.dlyTeam || '',
+    CON_NO: row[9] || '', CON_DATE: thaiDateShort_(row[14]), // สัญญาจ้างที่ + ลว. (ไทย)
+    APD: thaiDateShort_(extra.apd), // อนุมัติ ลว. (ไทย) — override APV/APD ด้านบน
   };
 
   var tmplId = PROP.getProperty('TEMPLATE_DOC_ID');
@@ -313,10 +400,11 @@ function apiMakePdf_(slipNo) {
   });
   doc.saveAndClose();
 
+  var period = periodMap_(led.values, String(key).split('|')[0])[slipNo] || slipNo;
   var blob = copy.getAs('application/pdf');
   copy.setTrashed(true); // ทิ้ง Doc ชั่วคราว — ไม่เก็บ PDF ใน Drive ส่ง bytes ให้เครื่องโหลด
   return {
-    filename: 'ใบตัดงบ_' + slipNo + '_' + key.replace(/\|/g, '-') + '.pdf',
+    filename: 'ใบตัดงบ_งวด' + period + '_' + key.replace(/\|/g, '-') + '.pdf',
     b64: Utilities.base64Encode(blob.getBytes()),
   };
 }
@@ -340,6 +428,15 @@ function thaiDateParts_(v) {
   var M = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
            'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
   return { day: String(d.getDate()), month: M[d.getMonth()], year: String(d.getFullYear() + 543) };
+}
+
+// วันที่ไทยแบบสั้น "8 ก.ค. 2569" สำหรับบรรทัด ลว. — รับได้ทั้ง Date (เซลล์ชีต auto-parse) และ "YYYY-MM-DD" (JSON) และค่าว่าง
+function thaiDateShort_(v) {
+  if (!v) return '';
+  var d = (v instanceof Date) ? v : new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  var M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  return d.getDate() + ' ' + M[d.getMonth()] + ' ' + (d.getFullYear() + 543);
 }
 
 // วันที่แบบสั้น d/m/พ.ศ. สำหรับหน้าสรุป

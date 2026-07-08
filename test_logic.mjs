@@ -5,7 +5,7 @@ import assert from 'assert';
 // โหลด logic.gs (เป็น plain JS) เข้ามาเป็นโมดูล
 const mod = { exports: {} };
 new Function('module', readFileSync('logic.gs', 'utf8'))(mod);
-const { budgetKey, round2, sumPaid, classifyReimport, validateSlip } = mod.exports;
+const { budgetKey, round2, sumPaid, classifyReimport, validateSlip, validateWbsCap } = mod.exports;
 
 // --- คีย์งบ ---
 assert.strictEqual(budgetKey('I-69-E-KCE69.M4.1104', '7001189571', '0020'),
@@ -69,4 +69,12 @@ s = cut(0.01);
 assert.strictEqual(s.balance, 0, 'รอบ3 คงเหลือ 0');
 assert.ok(!s.ok, 'รอบ3 เบิกเกิน → block');
 
-console.log('✅ logic ผ่านทุกเคส (คงเหลือ / กันเบิกเกิน / re-import diff + เตือนติดลบ / เบิกหลายรอบ)');
+// --- เพดานทั้งงาน: ตัดรวมทุกหมวดไม่เกินยอดจัดสรรรวม (219,400.00) ---
+assert.ok(validateWbsCap(219400, 0, 219400).ok, 'ตัดพอดีเพดาน = ผ่าน');
+assert.ok(validateWbsCap(219400, 200000, 19400).ok, 'ตัดสะสมพอดี 219,400 = ผ่าน');
+assert.ok(!validateWbsCap(219400, 200000, 19400.01).ok, 'เกินเพดาน 1 สตางค์ = block');
+assert.ok(!validateWbsCap(219400, 219400, 0.01).ok, 'ตัดครบเพดานแล้ว เบิกอีก = block');
+assert.ok(validateWbsCap(null, 999999, 999999).ok, 'ยังไม่ตั้งยอด (null) = ไม่บังคับ');
+assert.ok(validateWbsCap('', 500, 500).ok, 'ยอดว่าง = ไม่บังคับ');
+
+console.log('✅ logic ผ่านทุกเคส (คงเหลือ / กันเบิกเกิน / re-import / เบิกหลายรอบ / เพดานทั้งงาน)');

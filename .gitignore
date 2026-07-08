@@ -1,1 +1,14 @@
 node_modules/
+
+# ข้อมูลจริง/ภายใน PEA — ห้าม push ขึ้น repo สาธารณะ
+ตัวอย่าง zpsr018*.pdf
+นำเสนอแอป/
+KCE App Icon.dc.html
+
+# ไฟล์ชั่วคราวตอนทดสอบ API/PDF
+resp_*.json
+payload_*.json
+test_slip*.pdf
+_pdftext.mjs
+_pdfdiag.mjs
+pdf_text.txt

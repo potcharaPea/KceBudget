@@ -48,7 +48,20 @@ export function computeActivities(values) {
   return present;
 }
 
-// parse ทั้งเอกสาร → { wbs, networks:[{network, dept, allocation[7], categories[]}] }
+// ยอดจัดสรรรวมทั้ง WBS — บรรทัดสรุป "ได้รับจัดสรรงบประมาณจำนวณ X บาท"
+// ฟอนต์ไทยเพี้ยนจับคำไม่ได้ → ใช้ลายเซ็นเลข: บรรทัดเดียวที่ จัดสรร − เบิกแล้ว = คงเหลือ (n0-n1=n2)
+// อยู่กลางหน้าไม่ใช่ท้ายหน้า → ยึดตำแหน่งไม่ได้ ต้องยึดความสัมพันธ์เลข คืน null ถ้าหน้าไม่มีบรรทัดนี้
+// ponytail: heuristic อาจ false-match; การกรอกมือในแอปคือทางหลัก (fallback) ถ้าเลขเพี้ยน
+export function extractAllocationTotal(items) {
+  for (const row of groupByRow(items)) {
+    const nums = row.filter((it) => NUM_RE.test(it.s)).map((it) => toNum(it.s));
+    if (nums.length < 3 || nums[0] <= 0) continue;
+    if (Math.abs(nums[0] - nums[1] - nums[2]) < 0.005) return nums[0];
+  }
+  return null;
+}
+
+// parse ทั้งเอกสาร → { wbs, networks:[{network, dept, allocation[7], categories[]}], wbsTotal }
 export function parseZpsr018(items) {
   let wbs = null;
   const networks = [];
@@ -70,5 +83,5 @@ export function parseZpsr018(items) {
       categories: computeActivities(allocation),
     });
   }
-  return { wbs, networks };
+  return { wbs, networks, wbsTotal: extractAllocationTotal(items) };
 }
