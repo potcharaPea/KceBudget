@@ -786,24 +786,31 @@ function openSlip(b) {
       <div class="chklist">
         <label class="chk"><input type="checkbox" id="chk-VEH"> ค่ายานพาหนะ / เบี้ยเลี้ยง พชง</label>
         <label class="chk"><input type="checkbox" id="chk-TRV"> ค่าพาหนะ / เบี้ยเลี้ยง พชร(บ)</label>
-        <div class="chk-row"><label class="chk"><input type="checkbox" id="chk-CRN"> ค่าแรง พขร.(บ.) (เครนสว่านเจาะ)</label>
-          <select id="f-crnName" class="drv"><option value="">— เลือกชื่อ พขร. —</option>${drvOpts}</select></div>
-        <div class="chk-row"><label class="chk"><input type="checkbox" id="chk-CRT"> ค่าแรง พขร.(บ.) (รถกระเช้า)</label>
-          <select id="f-crtName" class="drv"><option value="">— เลือกชื่อ พขร. —</option>${drvOpts}</select></div>
-        <div style="display:flex;gap:8px;margin:2px 0 4px">
-          <button type="button" class="btn sec" id="addDriver" style="flex:none">${ic('plus')}เพิ่มชื่อ พขร.</button>
+        <label class="chk"><input type="checkbox" id="chk-CRN"> ค่าแรง พขร.(บ.) (เครนสว่านเจาะ)</label>
+        <div class="chk-detail"><select id="f-crnName" class="drv"><option value="">— เลือกชื่อ พขร. —</option>${drvOpts}</select></div>
+        <label class="chk"><input type="checkbox" id="chk-CRT"> ค่าแรง พขร.(บ.) (รถกระเช้า)</label>
+        <div class="chk-detail"><select id="f-crtName" class="drv"><option value="">— เลือกชื่อ พขร. —</option>${drvOpts}</select></div>
+        <div class="chk-detail">
+          <button type="button" class="btn sec" id="addDriver">${ic('plus')}เพิ่มชื่อ พขร.</button>
+          <span id="addDriverRow" style="display:none;gap:8px">
+            <input id="newDriver" placeholder="ชื่อ พขร. ใหม่">
+            <button type="button" class="btn" id="saveDriver">บันทึก</button>
+          </span>
+          <div id="driverErr" class="err" style="flex-basis:100%;margin:0"></div>
         </div>
-        <div id="addDriverRow" style="display:none;gap:8px;margin-bottom:6px">
-          <input id="newDriver" placeholder="ชื่อ พขร. ใหม่" style="flex:1">
-          <button type="button" class="btn" id="saveDriver" style="flex:none">บันทึก</button>
+        <label class="chk"><input type="checkbox" id="chk-DLY"> ค่าแรงคนงานรายวัน</label>
+        <div class="chk-detail">
+          <label class="minl">วันที่ <input type="date" id="f-dlyDate"></label>
+          <label class="minl">ทีม <input id="f-dlyTeam"></label>
         </div>
-        <div id="driverErr" class="err"></div>
-        <div class="chk-row"><label class="chk"><input type="checkbox" id="chk-DLY"> ค่าแรงคนงานรายวัน</label>
-          <span class="inl">งวด/วันที่ <input id="f-dlyDate" class="sm"> ทีม <input id="f-dlyTeam" class="sm"></span></div>
-        <div class="chk-row"><label class="chk"><input type="checkbox" id="chk-CON"> ค่าแรงจ้างเหมา</label>
-          <span class="inl">สัญญาจ้างที่ <input id="f-conNo" class="sm"> ลว. <input type="date" id="f-conDate" class="sm"></span></div>
+        <label class="chk"><input type="checkbox" id="chk-CON"> ค่าแรงจ้างเหมา</label>
+        <div class="chk-detail">
+          <label class="minl">สัญญาจ้างที่ <input id="f-conNo"></label>
+          <label class="minl">ลว. <input type="date" id="f-conDate"></label>
+        </div>
         <label class="chk"><input type="checkbox" id="chk-OIL"> ค่าน้ำมันยานพาหนะ</label>
         <label class="chk"><input type="checkbox" id="chk-OTH"> อื่นๆ</label>
+        <div class="chk-detail"><label class="minl">ระบุ <input id="f-othText" style="min-width:220px"></label></div>
       </div></div>
     <div class="field"><label>วันที่ตัด</label><input type="date" id="f-slipDate" value="${today}"></div>
     <div class="field"><label>จ่ายครั้งนี้ (บาท)</label><input type="number" step="0.01" min="0" id="f-payNow"></div>
@@ -894,6 +901,7 @@ async function submitSlip(b) {
     crtName: chk.CRT ? val('f-crtName') : '',
     dlyDate: chk.DLY ? val('f-dlyDate') : '',
     dlyTeam: chk.DLY ? val('f-dlyTeam') : '',
+    othText: chk.OTH ? val('f-othText') : '', // อื่นๆ ระบุ → แทนจุดไข่ปลาใน PDF
     apv: val('f-apv'), apd: val('f-apd'), // อนุมัติที่ / อนุมัติ ลว. (กรอกในแอป → PDF)
   };
   try {

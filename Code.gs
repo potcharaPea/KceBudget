@@ -384,7 +384,7 @@ function apiMakePdf_(slipNo) {
     CHK_VEH: ck_(chk.VEH), CHK_TRV: ck_(chk.TRV), CHK_CRN: ck_(chk.CRN), CHK_CRT: ck_(chk.CRT),
     CHK_DLY: ck_(chk.DLY), CHK_CON: ck_(chk.CON), CHK_OIL: ck_(chk.OIL), CHK_OTH: ck_(chk.OTH),
     CRN_NAME: extra.crnName || '', CRT_NAME: extra.crtName || '',
-    DLY_DATE: extra.dlyDate || '', DLY_TEAM: extra.dlyTeam || '',
+    DLY_DATE: thaiDateShort_(extra.dlyDate), DLY_TEAM: extra.dlyTeam || '', // วันที่ไทย
     CON_NO: row[9] || '', CON_DATE: thaiDateShort_(row[14]), // สัญญาจ้างที่ + ลว. (ไทย)
     APD: thaiDateShort_(extra.apd), // อนุมัติ ลว. (ไทย) — override APV/APD ด้านบน
   };
@@ -398,6 +398,8 @@ function apiMakePdf_(slipNo) {
   Object.keys(map).forEach(function (k) {
     body.replaceText('\\{' + k + '\\}', String(map[k])); // {} เป็น regex metachar ต้อง escape
   });
+  // อื่นๆ: ถ้ากรอกข้อความ → แทนจุดไข่ปลาหลัง "อื่นๆ" (template ไม่มี token ตรงนี้ ใช้ replace จุดแทน)
+  if (extra.othText) body.replaceText('อื่นๆ\\s*\\.{3,}', 'อื่นๆ  ' + extra.othText);
   doc.saveAndClose();
 
   var period = periodMap_(led.values, String(key).split('|')[0])[slipNo] || slipNo;
