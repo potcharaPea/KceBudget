@@ -1,6 +1,6 @@
 {
-  "name": "ใบตัดงบ กฟส.คำชะอี",
-  "short_name": "ใบตัดงบ",
+  "name": "PEA Budget กฟส.คำชะอี",
+  "short_name": "PEA Budget",
   "description": "คุมงบก่อสร้าง ZPSR018 · เปิดใบตัด · ออก PDF",
   "lang": "th",
   "start_url": "./",

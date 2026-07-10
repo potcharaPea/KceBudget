@@ -261,8 +261,9 @@ function apiDeleteNetwork_(data) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var wbs = String(data.wbs || ''), net = data.network;
-    var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return r[1] === wbs && r[2] === net; });
+    // network เลข 10 หลัก Sheets เก็บเป็น number → เทียบเป็น string ทั้งคู่ (กัน 6001416963 !== "6001416963")
+    var wbs = String(data.wbs || ''), net = String(data.network);
+    var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return String(r[1]) === wbs && String(r[2]) === net; });
     var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) {
       var p = String(r[1]).split('|'); return p[0] === wbs && p[1] === net; // คีย์ = wbs|network|act
     });
