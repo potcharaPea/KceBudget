@@ -8,8 +8,15 @@ pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-// เลขโหนดท้าย WBS เช่น .02.2 → "02.2" ('' ถ้าไม่มี) — ข้อ 4
-const extractNode = (wbs) => { const m = String(wbs || '').match(/\.(\d{2}\.\d)$/); return m ? m[1] : ''; };
+// แยก WBS แบบ C เป็น base/node/budgetOf/ownership (ข้อ 1/4) — แบบ I/ไม่มี node → base = WBS เต็ม
+const parseWbs = (wbs) => {
+  const m = String(wbs || '').match(/^(C-.*)\.(\d{2})\.(\d)$/);
+  return m ? { base: m[1], node: m[2] + '.' + m[3], budgetOf: m[2], ownership: m[3] }
+           : { base: String(wbs || ''), node: '', budgetOf: '', ownership: '' };
+};
+const extractNode = (wbs) => parseWbs(wbs).node; // เฉพาะ WBS แบบ C
+const ownerLabel = (ownership) => (ownership === '1' ? 'กฟภ.' : ownership === '2' ? 'ผู้ใช้ไฟ' : '');
+const budgetOfLabel = (budgetOf) => (budgetOf === '01' ? 'งบของ กฟภ.' : budgetOf === '02' ? 'งบของ ผู้ใช้ไฟ' : budgetOf === '03' ? 'งบของ อื่นๆ' : '');
 
 // ไอคอน SVG line (stroke currentColor) แทน emoji — กลมกลืนทั้งแอป
 const ICONS = {
@@ -355,6 +362,25 @@ function jobStats() {
   return Object.values(jobs);
 }
 
+// รวมเป็น "แฟ้ม" ตาม WBS base (ข้อ 1) — 1 แฟ้ม = หลาย node (แต่ละ node = 1 WBS เต็ม)
+function fileStats() {
+  const files = {};
+  jobStats().forEach((j) => {
+    const w = parseWbs(j.wbs);
+    const f = files[w.base] || (files[w.base] = { base: w.base, fileCode: '', oper: '', type: w.base.charAt(0), nodes: [], created: null });
+    f.nodes.push(j);
+    if (j.fileCode && !f.fileCode) f.fileCode = j.fileCode;
+    if (j.oper && !f.oper) f.oper = j.oper;
+    if (j.created && (!f.created || j.created < f.created)) f.created = j.created;
+  });
+  const vals = Object.values(files);
+  vals.forEach((f) => f.nodes.sort((a, b) => parseWbs(a.wbs).node.localeCompare(parseWbs(b.wbs).node)));
+  return vals;
+}
+// แฟ้มมีตัดงบแล้วอย่างน้อย 1 node หรือยัง (สถานะรวมทั้งแฟ้ม)
+const fileStatus = (f) => (f.nodes.every((n) => jobStatus(n) === 'none') ? 'none'
+  : f.nodes.every((n) => jobStatus(n) === 'done') ? 'done' : 'part');
+
 const TH_MONTH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 const dayKey = (d) => d.toISOString().slice(0, 10); // YYYY-MM-DD สำหรับ sort
@@ -365,32 +391,55 @@ const jobRemain = (j) => j.wbsTotal != null ? Math.round((j.wbsTotal - j.paid) *
 const jobStatus = (j) => (j.paid <= 0 ? 'none' : jobRemain(j) <= 0.005 ? 'done' : 'part'); // ยังไม่ตัด / เบิกครบ / กำลังตัด
 const STATUS_LABEL = { none: 'ยังไม่ตัด', part: 'กำลังตัด', done: 'เบิกครบ' };
 
-// การ์ดแฟ้ม 1 ใบ (ใช้ทั้งหน้าเลือกแฟ้ม + หน้ายังไม่ตัดงบ) — ยอดจัดสรร/คงเหลือ/ขีด ยึดยอดจัดสรรรวมทั้งงาน
-function fileCard(j) {
+// สรุป 1 node (ในการ์ดแฟ้ม) — กดเปิดหน้ารายละเอียดของ node นั้น (WBS เต็ม)
+function nodeSummary(j, active) {
   const base = jobBase(j), remain = jobRemain(j);
   const pct = base > 0 ? Math.min(100, (j.paid / base) * 100) : 0;
   const st = jobStatus(j);
-  return `<button class="filecard" data-wbs="${esc(j.wbs)}">
-    <div class="fc-top"><span class="fc-wbs">${j.fileCode ? esc(j.fileCode) + ' · ' : ''}${esc(j.wbs)}</span>
-      <span class="fc-badge ${st}">${STATUS_LABEL[st]}</span></div>
-    ${j.node ? `<div class="fc-tag">โหนด: ${esc(j.node)}</div>` : ''}
-    <div class="fc-meta">${j.oper ? esc(j.oper) + ' · ' : ''}${j.nets.size} โครงข่าย · ${j.cats} หมวดงบ</div>
+  return `<div class="fc-panel${active ? ' on' : ''}" data-wbs="${esc(j.wbs)}">
+    <div class="fc-row"><span class="fc-badge ${st}">${STATUS_LABEL[st]}</span>
+      <span class="fc-meta">${j.nets.size} โครงข่าย · ${j.cats} หมวดงบ</span></div>
     <div class="fc-bar"><i style="width:${pct.toFixed(1)}%"></i></div>
     <div class="fc-stats"><span>จัดสรร<b>${fmt(base)}</b></span>
-      <span>คงเหลือ<b class="${remain < 0 ? 'err' : ''}">${fmt(remain)}</b></span></div></button>`;
+      <span>คงเหลือ<b class="${remain < 0 ? 'err' : ''}">${fmt(remain)}</b></span></div></div>`;
+}
+
+// การ์ดแฟ้ม 1 ใบ = 1 base (ข้อ 1) — หัว รหัส—base + badge + tab ตาม node (ถ้ามีหลาย node)
+function fileCard(f) {
+  const st = fileStatus(f);
+  const typeLabel = f.type === 'C' ? 'งบ C' : f.type === 'I' ? 'งบ I' : '';
+  const multi = f.nodes.length > 1;
+  const tabs = multi ? `<div class="fc-tabs">${f.nodes.map((n, i) => {
+    const w = parseWbs(n.wbs);
+    return `<button class="fc-tab${i === 0 ? ' on' : ''}" data-tab="${i}">${esc(w.node)}${w.ownership ? ' ' + esc(ownerLabel(w.ownership)) : ''}</button>`;
+  }).join('')}</div>` : '';
+  const panels = f.nodes.map((n, i) => nodeSummary(n, i === 0)).join('');
+  return `<div class="filecard" data-file>
+    <div class="fc-top"><span class="fc-wbs">${esc(f.fileCode)} — ${esc(f.base)}</span>
+      <span class="fc-badge ${st}">${STATUS_LABEL[st]}</span></div>
+    <div class="fc-pills">${typeLabel ? `<span class="fc-pill">${typeLabel}</span>` : ''}${f.oper ? `<span class="fc-pill">${esc(f.oper)}</span>` : ''}</div>
+    ${tabs}${panels}</div>`;
 }
 function bindFileCards(root) {
-  root.querySelectorAll('.filecard').forEach((c) => c.addEventListener('click', () => openJob(c.dataset.wbs)));
+  root.querySelectorAll('.filecard').forEach((card) => {
+    card.querySelectorAll('.fc-tab').forEach((tab) => tab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const i = tab.dataset.tab;
+      card.querySelectorAll('.fc-tab').forEach((t) => t.classList.toggle('on', t === tab));
+      card.querySelectorAll('.fc-panel').forEach((p, pi) => p.classList.toggle('on', String(pi) === i));
+    }));
+    card.querySelectorAll('.fc-panel').forEach((p) => p.addEventListener('click', () => openJob(p.dataset.wbs)));
+  });
 }
 
 function updatePendingBadge() {
-  const n = jobStats().filter((j) => jobStatus(j) === 'none').length;
+  const n = fileStats().filter((f) => fileStatus(f) === 'none').length;
   $('pendCount').textContent = n || '';
 }
 
 // ---------- หน้า: เลือกแฟ้มงาน (จัดกลุ่มตามวันที่สร้าง) ----------
 function renderFiles() {
-  const jobs = jobStats().filter((j) => (j.wbs + ' ' + j.fileCode).toLowerCase().includes(search));
+  const jobs = fileStats().filter((f) => (f.base + ' ' + f.fileCode).toLowerCase().includes(search));
   if (!jobs.length) {
     $('filesOut').innerHTML = `<div class="list-empty">${budgets.length ? 'ไม่พบแฟ้มที่ค้นหา' : 'ยังไม่มีแฟ้ม — กด “นำเข้าไฟล์ ZPSR018” เพื่อเพิ่มแฟ้มแรก'}</div>`;
     return;
@@ -408,7 +457,7 @@ function renderFiles() {
 
 // ---------- หน้า: แฟ้มที่ยังไม่ตัดงบ ----------
 function renderPending() {
-  const pend = jobStats().filter((j) => jobStatus(j) === 'none');
+  const pend = fileStats().filter((f) => fileStatus(f) === 'none');
   if (!pend.length) { $('pendingOut').innerHTML = `<div class="list-empty"><span class="ok">${ic('check')}</span> ทุกแฟ้มเริ่มตัดงบแล้ว</div>`; return; }
   $('pendingOut').innerHTML = `<div class="files">${pend.map(fileCard).join('')}</div>`;
   bindFileCards($('pendingOut'));
@@ -646,7 +695,7 @@ function renderDetail() {
     <div style="flex:1">
       <div class="dh-kicker">หมายเลขงาน (WBS) <button class="link-edit" id="editWbs">${ic('edit')}แก้</button></div>
       <div class="dh-title">${esc(selectedWbs)}</div>
-      <div class="chips">${j.fileCode ? `<span class="chip">รหัสแฟ้ม ${esc(j.fileCode)}</span>` : ''}${j.node ? `<span class="chip">โหนด ${esc(j.node)}</span>` : ''}<span class="chip">${j.nets.size} โครงข่าย</span><span class="chip">${j.cats} หมวดงบ</span></div>
+      <div class="chips">${j.fileCode ? `<span class="chip">รหัสแฟ้ม ${esc(j.fileCode)}</span>` : ''}${j.node ? `<span class="chip">โหนด ${esc(j.node)}</span>` : ''}${budgetOfLabel(parseWbs(selectedWbs).budgetOf) ? `<span class="chip">${esc(budgetOfLabel(parseWbs(selectedWbs).budgetOf))}</span>` : ''}<span class="chip">${j.nets.size} โครงข่าย</span><span class="chip">${j.cats} หมวดงบ</span></div>
     </div>
     <div class="gauge" style="--pct:${pct.toFixed(1)};--gc:${gc}">
       <div class="g-v">${Math.round(pct)}%</div><div class="g-l">เบิกแล้ว</div></div>

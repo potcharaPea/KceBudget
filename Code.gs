@@ -45,23 +45,31 @@ function setup() {
   return ss.getUrl();
 }
 
-// รหัสแฟ้ม KCE## — 1 WBS = 1 แฟ้ม, รันตามลำดับที่ import (คอลัมน์ 12 ของแท็บงบ)
-// backfill แถวที่ยังไม่มีรหัสตามลำดับแถว (= ลำดับ import) → คืน { map:{wbs:code}, maxNum }
+// แยก WBS แบบ C เป็น base/node/budgetOf/ownership (ข้อ 1/4) — แบบ I หรือไม่มี node → base = WBS เต็ม
+function parseWbs_(wbs) {
+  var m = String(wbs || '').match(/^(C-.*)\.(\d{2})\.(\d)$/);
+  return m ? { base: m[1], node: m[2] + '.' + m[3], budgetOf: m[2], ownership: m[3] }
+           : { base: String(wbs || ''), node: '', budgetOf: '', ownership: '' };
+}
+
+// รหัสแฟ้ม KCE## — ผูกกับ WBS base (WBS ที่ base เดียวกัน = แฟ้มเดียวกัน, ข้อ 1)
+// backfill แถวที่ยังไม่มีรหัสตามลำดับแถว → คืน { map:{base:code}, maxNum }
 function ensureFileCodes_(sh) {
   var v = sh.getDataRange().getValues();
   var map = {}, maxNum = 0;
-  for (var i = 1; i < v.length; i++) { // รอบแรก: เก็บรหัสที่มี + หาเลขสูงสุด
+  for (var i = 1; i < v.length; i++) { // รอบแรก: เก็บรหัสที่มี (base แรกที่เจอชนะ) + หาเลขสูงสุด
     var code = v[i][11];
     if (code) {
-      map[v[i][1]] = code;
+      var base = parseWbs_(v[i][1]).base;
+      if (!map[base]) map[base] = code;
       var n = Number(String(code).replace(/^KCE/, ''));
       if (n > maxNum) maxNum = n;
     }
   }
-  for (var i = 1; i < v.length; i++) { // รอบสอง: แถวที่ยังไม่มีรหัส → กำหนดใหม่, ทั้ง WBS ใช้รหัสเดียว
-    var wbs = v[i][1];
-    if (!map[wbs]) map[wbs] = 'KCE' + pad2_(++maxNum);
-    if (v[i][11] !== map[wbs]) sh.getRange(i + 1, 12).setValue(map[wbs]);
+  for (var i = 1; i < v.length; i++) { // รอบสอง: แถวที่ base ยังไม่มีรหัส → กำหนดใหม่, ทั้ง base ใช้รหัสเดียว
+    var b = parseWbs_(v[i][1]).base;
+    if (!map[b]) map[b] = 'KCE' + pad2_(++maxNum);
+    if (v[i][11] !== map[b]) sh.getRange(i + 1, 12).setValue(map[b]);
   }
   return { map: map, maxNum: maxNum };
 }
@@ -132,14 +140,16 @@ function apiGetBudgets_() {
   return rows_(TABS.budget).values.map(function (r) {
     var allocation = Number(r[6]);
     var paid = sumPaid(led, r[0]);
+    var w = parseWbs_(r[1]); // base/node/budgetOf/ownership (derive จาก WBS — ไม่เก็บคอลัมน์)
     return {
       // เลขกิจกรรมดึงจากคีย์ (ปลอดภัยจาก Sheet ตัด leading zero — คีย์เก็บ "0020" ครบ)
       key: r[0], wbs: r[1], network: r[2], dept: r[3], category: r[4], act: String(r[0]).split('|')[2],
       allocation: allocation, paid: paid, balance: round2(allocation - paid),
       workName: r[9] || '', // ชื่องาน (กรอกครั้งเดียวตอน import → prefill ตอนเปิดใบตัด)
       wbsTotal: (r[10] === '' || r[10] === undefined || r[10] === null) ? null : Number(r[10]), // ยอดจัดสรรรวมทั้ง WBS
-      fileCode: r[11] || '', // รหัสแฟ้ม KCE## (1 WBS = 1 รหัส)
+      fileCode: r[11] || '', // รหัสแฟ้ม KCE## (ผูกกับ base)
       oper: r[12] || '', // ผู้ดำเนินการ (กฟภ. หรือชื่อบริษัท)
+      base: w.base, node: w.node, budgetOf: w.budgetOf, ownership: w.ownership, // ข้อ 1/4 (derive)
       imported: r[7] ? new Date(r[7]).toISOString() : '', // วันที่ import (ใช้จัดกลุ่มแฟ้มตามวันที่สร้าง)
     };
   });
@@ -186,10 +196,11 @@ function apiImportBudget_(data) {
     // ยอดจัดสรรรวมทั้ง WBS (ดึงจากบรรทัดสรุป best-effort — null ถ้าไฟล์นี้ไม่มีบรรทัด → กรอกมือทีหลัง)
     var wbsTotal = (data.wbsTotal === null || data.wbsTotal === undefined || data.wbsTotal === '') ? '' : Number(data.wbsTotal);
 
-    // รหัสแฟ้ม: WBS เดิม → รหัสเดิม, WBS ใหม่ → รันเลขถัดไป (backfill แถวเก่าที่ยังไม่มีด้วย)
+    // รหัสแฟ้ม: ผูกกับ base — base เดิม → รหัสเดิม, base ใหม่ → รันเลขถัดไป (backfill แถวเก่าด้วย)
     var wbs = (data.budgets && data.budgets[0]) ? data.budgets[0].wbs : '';
+    var base = parseWbs_(wbs).base;
     var fc = ensureFileCodes_(bTab.sh);
-    var fileCode = wbs ? (fc.map[wbs] || 'KCE' + pad2_(fc.maxNum + 1)) : '';
+    var fileCode = wbs ? (fc.map[base] || 'KCE' + pad2_(fc.maxNum + 1)) : '';
 
     var oper = data.oper || ''; // ผู้ดำเนินการ: "กฟภ." หรือชื่อบริษัท
 
@@ -488,7 +499,7 @@ function apiMakePdf_(slipNo) {
     DLY_TEAM: extra.dlyTeam || '',
     CON_NO: row[9] || '', CON_DATE: thaiDateShort_(row[14]), // สัญญาจ้างที่ + ลว. (ไทย)
     APD: thaiDateShort_(extra.apd), // อนุมัติ ลว. (ไทย) — override APV/APD ด้านบน
-    NODE: extractNode_(bud.wbs), OPER: bud.oper || '', // โหนด (ข้อ 4) + ผู้ดำเนินการ (ข้อ 5)
+    NODE: nodeLabel_(bud.wbs), OPER: bud.oper || '', // โหนด + งบของ (ข้อ 4) + ผู้ดำเนินการ (ข้อ 5)
     FCODE: bud.fileCode || '', // รหัสแฟ้ม KCE## บนหัวใบตัด (ข้อ 1)
     // ช่วงวันที่ค่าแรง 2 ช่อง (ข้อ 2) — from-to วันที่ไทยสั้น
     CRN_FROM: thaiDateShort_(extra.crnFrom), CRN_TO: thaiDateShort_(extra.crnTo),
@@ -518,10 +529,16 @@ function apiMakePdf_(slipNo) {
   };
 }
 
-// เลขโหนดท้าย WBS เช่น .02.2 → "02.2" ('' ถ้าไม่มี) — ข้อ 4
-function extractNode_(wbs) {
-  var m = String(wbs || '').match(/\.(\d{2}\.\d)$/);
-  return m ? m[1] : '';
+// label งบของ จาก budgetOf — ข้อ 4
+function budgetOfLabel_(b) {
+  return b === '01' ? 'งบของ กฟภ.' : b === '02' ? 'งบของ ผู้ใช้ไฟ' : b === '03' ? 'งบของ อื่นๆ' : '';
+}
+// โหนด + งบของ สำหรับ PDF เช่น "02.2  งบของ ผู้ใช้ไฟ" ('' ถ้า WBS แบบ I) — ข้อ 4
+function nodeLabel_(wbs) {
+  var w = parseWbs_(wbs);
+  if (!w.node) return '';
+  var bl = budgetOfLabel_(w.budgetOf);
+  return bl ? w.node + '  ' + bl : w.node;
 }
 
 // แยกจำนวนเงินเป็น { baht: "12,345", sat: "60" }
