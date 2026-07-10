@@ -75,12 +75,14 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').ca
 
 // เครดิตผู้พัฒนา — กดแล้วเด้ง modal
 $('credit').addEventListener('click', () => {
-  $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
-    <div style="text-align:center;padding:10px 0">
+  const dev = (name, role) => `<div style="text-align:center;padding:10px 0">
       <div style="color:var(--primary)"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></div>
-      <div style="font-size:18px;font-weight:600;margin-top:8px">นายพชระ ปรีดากรณ์</div>
-      <div class="sub" style="margin-top:4px">วศก.ผปร. กฟส.คช.</div>
-    </div>
+      <div style="font-size:18px;font-weight:600;margin-top:8px">${name}</div>
+      <div class="sub" style="margin-top:4px">${role}</div>
+    </div>`;
+  $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
+    ${dev('นายพชระ ปรีดากรณ์', 'วศก.ผปร. กฟส.คช.')}
+    ${dev('นายภัคพล คนซื่อ', 'พชง.ผปร. กฟส.คช.')}
     <div class="modal-actions" style="justify-content:center"><button class="btn" id="creditClose">ปิด</button></div>`;
   $('modal').classList.add('show');
   $('creditClose').addEventListener('click', closeModal);
