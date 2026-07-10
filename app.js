@@ -36,7 +36,8 @@ const spin = '<span class="spinner"></span>';
 let parsed = null;      // ผลอ่านไฟล์ล่าสุด {wbs, networks, fileName}
 let budgets = [];       // ก้อนงบจาก server
 let settings = {};      // master data dropdown
-let selectedWbs = null; // งานที่เลือกดูอยู่ (WBS)
+let selectedBase = null; // แฟ้มที่เลือกดูอยู่ (WBS base)
+let selectedNode = 'ALL'; // โหนดที่เลือกในแฟ้ม: 'ALL' (ทุกโหนด) หรือ WBS เต็มของโหนดนั้น
 let search = '';        // คำค้นในหน้าเลือกแฟ้ม
 let dashMode = 'sum';   // โหมด Dashboard: sum | month | year
 let remainCats = null;  // ข้อ 6: Set หมวดงบที่เลือก (null = ทั้งหมด)
@@ -335,7 +336,7 @@ async function loadBudgets() {
 
 // เรนเดอร์เฉพาะ panel ที่กำลังเปิดอยู่ (หลังโหลดข้อมูลใหม่)
 function renderActivePanel() {
-  if ($('panel-job').classList.contains('active') && selectedWbs) renderDetail();
+  if ($('panel-job').classList.contains('active') && selectedBase) renderDetail();
   else if ($('panel-pending').classList.contains('active')) renderPending();
   else if ($('panel-dashboard').classList.contains('active')) renderDashboard();
   else if ($('panel-remaining').classList.contains('active')) renderRemaining();
@@ -423,12 +424,16 @@ function fileCard(f) {
 function bindFileCards(root) {
   root.querySelectorAll('.filecard').forEach((card) => {
     card.querySelectorAll('.fc-tab').forEach((tab) => tab.addEventListener('click', (e) => {
-      e.stopPropagation();
+      e.stopPropagation(); // กด tab = สลับ node ไม่เข้าแฟ้ม
       const i = tab.dataset.tab;
       card.querySelectorAll('.fc-tab').forEach((t) => t.classList.toggle('on', t === tab));
       card.querySelectorAll('.fc-panel').forEach((p, pi) => p.classList.toggle('on', String(pi) === i));
     }));
-    card.querySelectorAll('.fc-panel').forEach((p) => p.addEventListener('click', () => openJob(p.dataset.wbs)));
+    // กดที่ไหนก็ได้ในการ์ด (ยกเว้น tab) → เข้าแฟ้มที่ node ที่เลือกอยู่
+    card.addEventListener('click', () => {
+      const active = card.querySelector('.fc-panel.on');
+      if (active) openJob(active.dataset.wbs);
+    });
   });
 }
 
@@ -668,54 +673,96 @@ function periodTotal(jobs) {
   return t;
 }
 
-// เข้าหน้ารายละเอียดแฟ้มที่เลือก
+// เข้าหน้ารายละเอียดแฟ้ม — รับ WBS ของโหนด → เปิดที่ระดับแฟ้ม (base) โหมด "ทั้งหมด"
 function openJob(wbs) {
   flashCutKey = null; // เข้าแฟ้มใหม่ = เลิกไฮไลต์ก้อนที่เคยตัด
-  selectedWbs = wbs;
+  selectedBase = parseWbs(wbs).base;
+  selectedNode = 'ALL';
   showPanel('job');
   renderDetail();
 }
 
 function renderDetail() {
-  const shown = budgets.filter((b) => b.wbs === selectedWbs);
-  if (!shown.length) { $('detailOut').innerHTML = '<div class="card">ไม่พบก้อนงบของงานนี้</div>'; return; }
-  const j = jobStats().find((x) => x.wbs === selectedWbs);
-  // %เบิกแล้วคิดจากยอดจัดสรรรวมทั้งงาน (fallback: รวมหมวด ถ้ายังไม่ตั้งยอด)
-  const pctBase = jobBase(j);
-  const pct = pctBase > 0 ? Math.min(100, (j.paid / pctBase) * 100) : 0;
-  const gc = j.bal < 0 ? 'var(--err)' : 'var(--primary)';
-  const fk = flashCutKey; // ก้อนที่เพิ่งตัด → ไฮไลต์ค้างไว้ (เคลียร์ตอนออกจากแฟ้ม)
-  // คงเหลือ = ยอดจัดสรรรวมทั้งงาน − จ่ายแล้ว (fallback: รวมคงเหลือรายหมวด ถ้ายังไม่ตั้งยอดจัดสรรรวม)
-  const wbsRemain = jobRemain(j);
+  const file = fileStats().find((f) => f.base === selectedBase);
+  if (!file) { $('detailOut').innerHTML = '<div class="card">ไม่พบแฟ้มนี้</div>'; return; }
+  const nodes = file.nodes; // per-WBS jobStats เรียงตามโหนด
+  const multi = nodes.length > 1;
+  // ถ้าโหนดที่เลือกไม่มีแล้ว (เช่นเพิ่งลบ) → กลับไป ALL
+  if (selectedNode !== 'ALL' && !nodes.some((n) => n.wbs === selectedNode)) selectedNode = 'ALL';
+  const active = selectedNode === 'ALL' ? nodes : nodes.filter((n) => n.wbs === selectedNode);
 
-  // ปุ่มย้อนกลับ + หัวเรื่อง + เกจ %เบิกแล้ว
-  let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button>
-    <button class="btn sec" id="delFile" style="margin-left:auto;color:var(--err)">${ic('trash')}ลบแฟ้ม</button></div>
+  // เกจ % รวมทั้งแฟ้ม
+  const fBase = nodes.reduce((s, n) => s + jobBase(n), 0);
+  const fPaid = nodes.reduce((s, n) => s + n.paid, 0);
+  const pct = fBase > 0 ? Math.min(100, (fPaid / fBase) * 100) : 0;
+  const isC = file.type === 'C';
+
+  let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button></div>
   <div class="detail-head">
     <div style="flex:1">
-      <div class="dh-kicker">หมายเลขงาน (WBS) <button class="link-edit" id="editWbs">${ic('edit')}แก้</button></div>
-      <div class="dh-title">${esc(selectedWbs)}</div>
-      <div class="chips">${j.fileCode ? `<span class="chip">รหัสแฟ้ม ${esc(j.fileCode)}</span>` : ''}${j.node ? `<span class="chip">โหนด ${esc(j.node)}</span>` : ''}${budgetOfLabel(parseWbs(selectedWbs).budgetOf) ? `<span class="chip">${esc(budgetOfLabel(parseWbs(selectedWbs).budgetOf))}</span>` : ''}<span class="chip">${j.nets.size} โครงข่าย</span><span class="chip">${j.cats} หมวดงบ</span></div>
+      <div class="dh-kicker">${isC ? 'หมายเลขงานหลัก (WBS base)' : 'หมายเลขงาน (WBS)'}</div>
+      <div class="dh-title">${esc(file.base)}</div>
+      <div class="chips">${file.fileCode ? `<span class="chip">รหัสแฟ้ม ${esc(file.fileCode)}</span>` : ''}<span class="chip">งบ ${esc(file.type)}</span><span class="chip">${nodes.length} โหนด</span></div>
     </div>
-    <div class="gauge" style="--pct:${pct.toFixed(1)};--gc:${gc}">
+    <div class="gauge" style="--pct:${pct.toFixed(1)};--gc:var(--primary)">
       <div class="g-v">${Math.round(pct)}%</div><div class="g-l">เบิกแล้ว</div></div>
   </div>`;
 
-  // ผู้ดำเนินการ (ข้อ 5) — แก้ไขได้
+  // ตัวเลือกโหนด (ทั้งหมด / แต่ละโหนด) — โชว์เมื่อมีหลายโหนด
+  if (multi) {
+    html += `<div class="seg node-seg"><button data-node="ALL" class="${selectedNode === 'ALL' ? 'on' : ''}">ทั้งหมด</button>${nodes.map((n) => {
+      const w = parseWbs(n.wbs);
+      return `<button data-node="${esc(n.wbs)}" class="${selectedNode === n.wbs ? 'on' : ''}">${esc(w.node)}${w.ownership ? ' ' + esc(ownerLabel(w.ownership)) : ''}</button>`;
+    }).join('')}</div>`;
+  }
+
+  html += active.map((n) => renderNodeBlock(n, multi)).join('');
+  $('detailOut').innerHTML = html;
+
+  // events (ใช้ data-attr เพราะมีหลายโหนด)
+  $('backFiles').addEventListener('click', () => goPanel('files'));
+  document.querySelectorAll('[data-node]').forEach((btn) =>
+    btn.addEventListener('click', () => { selectedNode = btn.dataset.node; renderDetail(); }));
+  document.querySelectorAll('[data-editwbs]').forEach((btn) => btn.addEventListener('click', () => editWbs(btn.dataset.editwbs)));
+  document.querySelectorAll('[data-editoper]').forEach((btn) => btn.addEventListener('click', () => editOper(btn.dataset.editoper, budgets.find((b) => b.wbs === btn.dataset.editoper)?.oper || '')));
+  document.querySelectorAll('[data-editwt]').forEach((btn) => btn.addEventListener('click', () => editWbsTotal(btn.dataset.editwt, nodeByWbs(btn.dataset.editwt).wbsTotal)));
+  document.querySelectorAll('[data-delnode]').forEach((btn) => btn.addEventListener('click', () => askDeleteFile(btn.dataset.delnode)));
+  document.querySelectorAll('[data-delnet]').forEach((btn) => btn.addEventListener('click', () => askDeleteNetwork(btn.dataset.wbs, btn.dataset.delnet)));
+  document.querySelectorAll('[data-cut]').forEach((btn) => btn.addEventListener('click', () => openSlip(budgets[+btn.dataset.cut])));
+  document.querySelectorAll('[data-sum]').forEach((btn) => btn.addEventListener('click', () => openSummary(budgets[+btn.dataset.sum])));
+}
+
+const nodeByWbs = (wbs) => jobStats().find((x) => x.wbs === wbs);
+
+// 1 โหนด (block) — ผู้ดำเนินการ/ยอดจัดสรร/KPI/โครงข่าย + ปุ่มเดิม (target = WBS ของโหนด)
+function renderNodeBlock(j, multi) {
+  const w = parseWbs(j.wbs);
+  const shown = budgets.filter((b) => b.wbs === j.wbs);
+  const wbsRemain = jobRemain(j);
+  const fk = flashCutKey;
+  const delLabel = w.node ? 'ลบโหนด' : 'ลบแฟ้ม';
+
+  let html = `<div class="node-block">`;
+  // หัวโหนด: WBS เต็ม + chips โหนด/งบของ + ปุ่ม แก้ WBS / ลบโหนด
+  html += `<div class="node-head">
+    <div style="flex:1"><div class="nb-wbs">${esc(j.wbs)} <button class="link-edit" data-editwbs="${esc(j.wbs)}">${ic('edit')}แก้</button></div>
+      <div class="chips">${w.node ? `<span class="chip">โหนด ${esc(w.node)}</span>` : ''}${budgetOfLabel(w.budgetOf) ? `<span class="chip">${esc(budgetOfLabel(w.budgetOf))}</span>` : ''}<span class="chip">${j.nets.size} โครงข่าย · ${j.cats} หมวดงบ</span></div></div>
+    <button class="btn sec" data-delnode="${esc(j.wbs)}" style="color:var(--err);flex:none">${ic('trash')}${delLabel}</button>
+  </div>`;
+
+  // ผู้ดำเนินการ + ยอดจัดสรรรวม (แก้ได้)
   html += `<div class="wbs-total">
     <div><span class="l">ผู้ดำเนินการ</span>
       <span class="v">${j.oper ? esc(j.oper) : '<i style="color:var(--warn,#b8860b)">ยังไม่ระบุ</i>'}</span></div>
-    <button class="btn sec" id="editOper">${ic('edit')}แก้</button>
-  </div>`;
-
-  // ยอดจัดสรรรวมทั้งงาน (จาก ZPSR018 หรือกรอกมือ) — แก้ไขได้
-  html += `<div class="wbs-total">
+    <button class="btn sec" data-editoper="${esc(j.wbs)}">${ic('edit')}แก้</button>
+  </div>
+  <div class="wbs-total">
     <div><span class="l">ยอดจัดสรรรวมทั้งงาน (จาก ZPSR018)</span>
       <span class="v">${j.wbsTotal != null ? fmt(j.wbsTotal) + ' บาท' : '<i style="color:var(--warn,#b8860b)">ยังไม่มี — กดแก้เพื่อกรอกมือ</i>'}</span></div>
-    <button class="btn sec" id="editWbsTotal">${ic('edit')}แก้ยอด</button>
+    <button class="btn sec" data-editwt="${esc(j.wbs)}">${ic('edit')}แก้ยอด</button>
   </div>`;
 
-  // KPI 5 ช่อง
+  // KPI
   html += `<div class="kpis">
     <div class="kpi"><div class="v">${fmt(j.alloc)}</div><div class="l">รวมทุกงบ</div></div>
     <div class="kpi"><div class="v">${j.wbsTotal != null ? fmt(j.wbsTotal) : '—'}</div><div class="l">ยอดจัดสรรรวม</div></div>
@@ -730,7 +777,7 @@ function renderDetail() {
   for (const grp of Object.keys(byNet)) {
     const [network, dept] = grp.split('|');
     html += `<div class="net"><h2>โครงข่าย ${esc(network)}<span class="dept">${esc(dept)}</span>
-        <button class="btn sec net-del" data-delnet="${esc(network)}" style="color:var(--err);padding:5px 10px;font-size:12px">${ic('trash')}ลบโครงข่าย</button></h2>
+        <button class="btn sec net-del" data-delnet="${esc(network)}" data-wbs="${esc(j.wbs)}" style="color:var(--err);padding:5px 10px;font-size:12px">${ic('trash')}ลบโครงข่าย</button></h2>
       <table><thead><tr><th>หมวดงบ</th><th>เลขกิจ</th><th class="num">ยอดจัดสรร</th><th class="num">จ่ายแล้ว</th><th class="num">คงเหลือ</th><th></th></tr></thead><tbody>`;
     for (const b of byNet[grp]) {
       const i = budgets.indexOf(b);
@@ -744,18 +791,7 @@ function renderDetail() {
     }
     html += `</tbody></table></div>`;
   }
-  $('detailOut').innerHTML = html;
-  $('backFiles').addEventListener('click', () => goPanel('files'));
-  $('delFile').addEventListener('click', () => askDeleteFile(selectedWbs));
-  $('editWbsTotal').addEventListener('click', () => editWbsTotal(selectedWbs, j.wbsTotal));
-  $('editOper').addEventListener('click', () => editOper(selectedWbs, j.oper));
-  $('editWbs').addEventListener('click', () => editWbs(selectedWbs));
-  document.querySelectorAll('[data-delnet]').forEach((btn) =>
-    btn.addEventListener('click', () => askDeleteNetwork(selectedWbs, btn.dataset.delnet)));
-  document.querySelectorAll('[data-cut]').forEach((btn) =>
-    btn.addEventListener('click', () => openSlip(budgets[+btn.dataset.cut])));
-  document.querySelectorAll('[data-sum]').forEach((btn) =>
-    btn.addEventListener('click', () => openSummary(budgets[+btn.dataset.sum])));
+  return html + `</div>`;
 }
 
 // ---------- แก้ยอดจัดสรรรวมทั้งงานด้วยมือ (fallback ถ้าดึงจาก PDF ไม่ได้) ----------
@@ -833,7 +869,8 @@ function editWbs(oldWbs) {
     const btn = $('ewSave'); btn.disabled = true;
     try {
       await callApi('editWbs', { oldWbs, newWbs });
-      selectedWbs = newWbs; // ตามไปดูแฟ้มเดิมที่เปลี่ยนเลขแล้ว
+      selectedBase = parseWbs(newWbs).base; // ตามไปดูแฟ้มที่เปลี่ยนเลขแล้ว
+      if (selectedNode === oldWbs) selectedNode = newWbs;
       closeModal();
       await loadBudgets();
     } catch (err) { $('ewErr').textContent = 'บันทึกไม่สำเร็จ: ' + err.message; btn.disabled = false; }
@@ -878,10 +915,11 @@ async function doDeleteFile(wbs) {
   try {
     const r = await callApi('deleteFile', { wbs, password: $('delPw').value });
     closeModal();
-    goPanel('files');
     await loadBudgets();
-    $('filesOut').insertAdjacentHTML('afterbegin',
-      `<div class="flash ok">${ic('check')}ลบแฟ้ม ${esc(wbs)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`);
+    const flash = `<div class="flash ok">${ic('check')}ลบ ${esc(wbs)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`;
+    // ยังมีโหนดอื่นในแฟ้ม → อยู่ในแฟ้มเดิม; ไม่งั้นกลับหน้าเลือกแฟ้ม
+    if (budgets.some((b) => parseWbs(b.wbs).base === selectedBase)) { $('detailOut').insertAdjacentHTML('afterbegin', flash); }
+    else { goPanel('files'); $('filesOut').insertAdjacentHTML('afterbegin', flash); }
   } catch (err) {
     btn.disabled = false;
     $('delErr').textContent = err.message;
@@ -927,8 +965,8 @@ async function doDeleteNetwork(wbs, network) {
     closeModal();
     await loadBudgets();
     const flash = `<div class="flash ok">${ic('check')}ลบโครงข่าย ${esc(network)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`;
-    // ถ้าลบโครงข่ายสุดท้าย → แฟ้มว่าง กลับหน้าเลือกแฟ้ม; ไม่งั้นอยู่หน้ารายละเอียดเดิม
-    if (budgets.some((b) => b.wbs === wbs)) { $('detailOut').insertAdjacentHTML('afterbegin', flash); }
+    // ยังมีก้อนงบในแฟ้มนี้ → อยู่หน้าเดิม; ไม่งั้นกลับหน้าเลือกแฟ้ม
+    if (budgets.some((b) => parseWbs(b.wbs).base === selectedBase)) { $('detailOut').insertAdjacentHTML('afterbegin', flash); }
     else { goPanel('files'); $('filesOut').insertAdjacentHTML('afterbegin', flash); }
   } catch (err) {
     btn.disabled = false;
