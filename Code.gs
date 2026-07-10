@@ -100,6 +100,7 @@ function doPost(e) {
       case 'getSlips': result = apiGetSlips_(data.key); break;
       case 'makePdf': result = apiMakePdf_(data.slipNo); break;
       case 'deleteFile': result = apiDeleteFile_(data); break;
+      case 'deleteFileAll': result = apiDeleteFileAll_(data); break;
       case 'deleteNetwork': result = apiDeleteNetwork_(data); break;
       case 'addDriver': result = apiAddSetting_('พขร.', data.name); break;
       case 'addRequester': result = apiAddSetting_('ผู้เบิก', data.name); break;
@@ -258,6 +259,23 @@ function apiDeleteFile_(data) {
     var wbs = data.wbs;
     var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return r[1] === wbs; });
     var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) { return String(r[1]).split('|')[0] === wbs; });
+    return { budgets: budgets, slips: slips };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ลบทั้งแฟ้ม (base) — งบ + ใบตัดทุกโหนดของ base (งบ C หลายโหนด) — ยืนยันด้วยรหัสผ่าน
+// data = { base, password }
+function apiDeleteFileAll_(data) {
+  if (String(data.password) !== '509758') throw new Error('รหัสผ่านไม่ถูกต้อง');
+  if (!data.base) throw new Error('ไม่ระบุหมายเลขงานหลัก (WBS base)');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var base = String(data.base);
+    var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return parseWbs_(r[1]).base === base; });
+    var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) { return parseWbs_(String(r[1]).split('|')[0]).base === base; });
     return { budgets: budgets, slips: slips };
   } finally {
     lock.releaseLock();

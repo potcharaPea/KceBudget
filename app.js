@@ -697,7 +697,8 @@ function renderDetail() {
   const pct = fBase > 0 ? Math.min(100, (fPaid / fBase) * 100) : 0;
   const isC = file.type === 'C';
 
-  let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button></div>
+  let html = `<div class="back-bar"><button class="btn sec" id="backFiles">← กลับหน้าเลือกแฟ้มงาน</button>
+    ${multi ? `<button class="btn sec" id="delFileAll" style="margin-left:auto;color:var(--err)">${ic('trash')}ลบทั้งแฟ้ม (${nodes.length} โหนด)</button>` : ''}</div>
   <div class="detail-head">
     <div style="flex:1">
       <div class="dh-kicker">${isC ? 'หมายเลขงานหลัก (WBS base)' : 'หมายเลขงาน (WBS)'}</div>
@@ -721,6 +722,7 @@ function renderDetail() {
 
   // events (ใช้ data-attr เพราะมีหลายโหนด)
   $('backFiles').addEventListener('click', () => goPanel('files'));
+  if ($('delFileAll')) $('delFileAll').addEventListener('click', () => askDeleteFileAll(file.base, nodes.length));
   document.querySelectorAll('[data-node]').forEach((btn) =>
     btn.addEventListener('click', () => { selectedNode = btn.dataset.node; renderDetail(); }));
   document.querySelectorAll('[data-editwbs]').forEach((btn) => btn.addEventListener('click', () => editWbs(btn.dataset.editwbs)));
@@ -923,6 +925,53 @@ async function doDeleteFile(wbs) {
   } catch (err) {
     btn.disabled = false;
     $('delErr').textContent = err.message;
+  }
+}
+
+// ---------- ลบทั้งแฟ้ม (ทุกโหนดของ base) — ยืนยัน 2 ชั้น + รหัสผ่าน ----------
+function askDeleteFileAll(base, nodeCount) {
+  const rows = budgets.filter((b) => parseWbs(b.wbs).base === base);
+  const hasCut = rows.some((b) => b.paid > 0);
+  $('modalBox').innerHTML = `<h3><span style="color:var(--err)">${ic('alert')}</span>ลบทั้งแฟ้ม</h3>
+    <div class="sub">หมายเลขงานหลัก <b>${esc(base)}</b></div>
+    <div class="warn" style="margin:12px 0">จะลบ <b>ทุกโหนด (${nodeCount} โหนด)</b> — ก้อนงบ ${rows.length} หมวด${hasCut ? ' + ใบตัดทุกใบของแฟ้มนี้' : ''} ออกถาวร กู้คืนไม่ได้</div>
+    <div class="modal-actions">
+      <button class="btn sec" id="dfaCancel">ยกเลิก</button>
+      <button class="btn" id="dfaNext" style="background:var(--err)">ดำเนินการต่อ →</button>
+    </div>`;
+  $('modal').classList.add('show');
+  $('dfaCancel').addEventListener('click', closeModal);
+  $('dfaNext').addEventListener('click', () => askDeleteFileAllPassword(base));
+}
+
+function askDeleteFileAllPassword(base) {
+  $('modalBox').innerHTML = `<h3>${ic('lock')}ยืนยันการลบ</h3>
+    <div class="sub">ใส่รหัสผ่านเพื่อลบทั้งแฟ้ม <b>${esc(base)}</b> (ทุกโหนด) ถาวร</div>
+    <div class="field" style="margin-top:12px"><label>รหัสผ่าน</label>
+      <input type="password" id="dfaPw" autocomplete="off"></div>
+    <div id="dfaErr" class="err"></div>
+    <div class="modal-actions">
+      <button class="btn sec" id="dfaCancel2">ยกเลิก</button>
+      <button class="btn" id="dfaDo" style="background:var(--err)">${ic('trash')}ลบถาวร</button>
+    </div>`;
+  $('dfaCancel2').addEventListener('click', closeModal);
+  $('dfaDo').addEventListener('click', () => doDeleteFileAll(base));
+  $('dfaPw').focus();
+}
+
+async function doDeleteFileAll(base) {
+  if ($('dfaPw').value !== '509758') { $('dfaErr').textContent = 'รหัสผ่านไม่ถูกต้อง'; return; }
+  const btn = $('dfaDo'); btn.disabled = true; $('dfaErr').textContent = '';
+  try {
+    const r = await callApi('deleteFileAll', { base, password: $('dfaPw').value });
+    closeModal();
+    goPanel('files');
+    await loadBudgets();
+    $('filesOut').insertAdjacentHTML('afterbegin',
+      `<div class="flash ok">${ic('check')}ลบทั้งแฟ้ม ${esc(base)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`);
+  } catch (err) {
+    btn.disabled = false;
+    $('dfaErr').textContent = err.message;
   }
 }
 
