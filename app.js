@@ -767,7 +767,7 @@ function editOper(wbs, current) {
 // ---------- แก้ WBS (ข้อ 3 — กรณีระบบอ่านผิด) ----------
 function editWbs(oldWbs) {
   $('modalBox').innerHTML = `<h3>${ic('edit')}แก้หมายเลขงาน (WBS)</h3>
-    <div class="sub">ของเดิม <b>${esc(oldWbs)}</b> — แก้แล้วจะเปลี่ยนทุกก้อนงบ/ใบตัดของแฟ้มนี้</div>
+    <div class="sub">ของเดิม <b>${oldWbs ? esc(oldWbs) : '(ยังไม่มี — อ่านไม่ได้ตอน import)'}</b> — แก้แล้วจะเปลี่ยนทุกก้อนงบ/ใบตัดของแฟ้มนี้</div>
     <div class="field" style="margin-top:12px"><label>WBS ใหม่</label>
       <input id="ewVal" value="${esc(oldWbs)}"></div>
     <div id="ewErr" class="err"></div>

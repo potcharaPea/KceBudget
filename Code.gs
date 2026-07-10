@@ -257,11 +257,11 @@ function apiDeleteFile_(data) {
 // data = { wbs, network, password }
 function apiDeleteNetwork_(data) {
   if (String(data.password) !== '509758') throw new Error('รหัสผ่านไม่ถูกต้อง');
-  if (!data.wbs || !data.network) throw new Error('ไม่ระบุหมายเลขงาน (WBS) หรือโครงข่าย');
+  if (!data.network) throw new Error('ไม่ระบุโครงข่าย'); // wbs ว่างได้ (แฟ้มเก่าที่อ่าน WBS ไม่ได้)
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var wbs = data.wbs, net = data.network;
+    var wbs = String(data.wbs || ''), net = data.network;
     var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return r[1] === wbs && r[2] === net; });
     var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) {
       var p = String(r[1]).split('|'); return p[0] === wbs && p[1] === net; // คีย์ = wbs|network|act
@@ -316,7 +316,7 @@ function apiSetOper_(data) {
 // data = { oldWbs, newWbs }
 function apiEditWbs_(data) {
   var oldWbs = String(data.oldWbs || '').trim(), newWbs = String(data.newWbs || '').trim();
-  if (!oldWbs || !newWbs) throw new Error('ต้องระบุ WBS เดิมและใหม่');
+  if (!newWbs) throw new Error('ต้องระบุ WBS ใหม่'); // oldWbs ว่างได้ (แฟ้มเก่าที่อ่าน WBS ไม่ได้)
   if (oldWbs === newWbs) return { changed: 0 };
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
