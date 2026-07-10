@@ -19,10 +19,13 @@ function setup() {
               : SpreadsheetApp.create('ใบตัดงบ กฟส.คำชะอี — ฐานข้อมูล');
   if (!id) PROP.setProperty(SHEET_ID_KEY, ss.getId());
 
-  ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง', 'ชื่องาน', 'ยอดจัดสรรรวม']);
-  // migrate ชีตที่ deploy ไปแล้ว — เติมหัวคอลัมน์ยอดจัดสรรรวม (คอลัมน์ 11) ถ้ายังไม่มี
+  ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง', 'ชื่องาน', 'ยอดจัดสรรรวม', 'รหัสแฟ้ม', 'ผู้ดำเนินการ']);
+  // migrate ชีตที่ deploy ไปแล้ว — เติมหัวคอลัมน์ยอดจัดสรรรวม (11) + รหัสแฟ้ม (12) + ผู้ดำเนินการ (13) ถ้ายังไม่มี
   var bSh = ss.getSheetByName(TABS.budget);
   if (bSh.getRange(1, 11).getValue() !== 'ยอดจัดสรรรวม') bSh.getRange(1, 11).setValue('ยอดจัดสรรรวม');
+  if (bSh.getRange(1, 12).getValue() !== 'รหัสแฟ้ม') bSh.getRange(1, 12).setValue('รหัสแฟ้ม');
+  if (bSh.getRange(1, 13).getValue() !== 'ผู้ดำเนินการ') bSh.getRange(1, 13).setValue('ผู้ดำเนินการ');
+  ensureFileCodes_(bSh); // backfill รหัสแฟ้ม KCE## ให้แถวเก่าที่ยังไม่มี (เรียงตามลำดับแถว = ลำดับ import)
   ensureTab_(ss, TABS.ledger, ['เลขที่ใบ', 'คีย์งบ', 'วันที่ตัด', 'จ่ายครั้งนี้', 'คงเหลือหลังตัด', 'ชื่องาน', 'ผู้เบิก', 'ตำแหน่ง', 'ชื่อ พขร.', 'สัญญาจ้าง', 'เลขใบสำคัญจ่าย', 'ผู้ทำรายการ', 'timestamp', 'clientId', 'ลว.สัญญา', 'รายละเอียด']);
   // migrate — เติมหัวคอลัมน์ clientId (14) + ลว.สัญญา (15) + รายละเอียด JSON (16) ถ้ายังไม่มี
   var ledSh0 = ss.getSheetByName(TABS.ledger);
@@ -41,6 +44,28 @@ function setup() {
   Logger.log('สเปรดชีต: ' + ss.getUrl());
   return ss.getUrl();
 }
+
+// รหัสแฟ้ม KCE## — 1 WBS = 1 แฟ้ม, รันตามลำดับที่ import (คอลัมน์ 12 ของแท็บงบ)
+// backfill แถวที่ยังไม่มีรหัสตามลำดับแถว (= ลำดับ import) → คืน { map:{wbs:code}, maxNum }
+function ensureFileCodes_(sh) {
+  var v = sh.getDataRange().getValues();
+  var map = {}, maxNum = 0;
+  for (var i = 1; i < v.length; i++) { // รอบแรก: เก็บรหัสที่มี + หาเลขสูงสุด
+    var code = v[i][11];
+    if (code) {
+      map[v[i][1]] = code;
+      var n = Number(String(code).replace(/^KCE/, ''));
+      if (n > maxNum) maxNum = n;
+    }
+  }
+  for (var i = 1; i < v.length; i++) { // รอบสอง: แถวที่ยังไม่มีรหัส → กำหนดใหม่, ทั้ง WBS ใช้รหัสเดียว
+    var wbs = v[i][1];
+    if (!map[wbs]) map[wbs] = 'KCE' + pad2_(++maxNum);
+    if (v[i][11] !== map[wbs]) sh.getRange(i + 1, 12).setValue(map[wbs]);
+  }
+  return { map: map, maxNum: maxNum };
+}
+function pad2_(n) { return (n < 10 ? '0' : '') + n; }
 
 function ensureTab_(ss, name, header) {
   var sh = ss.getSheetByName(name);
@@ -69,7 +94,10 @@ function doPost(e) {
       case 'deleteFile': result = apiDeleteFile_(data); break;
       case 'addDriver': result = apiAddSetting_('พขร.', data.name); break;
       case 'addRequester': result = apiAddSetting_('ผู้เบิก', data.name); break;
+      case 'addCompany': result = apiAddSetting_('บริษัท', data.name); break;
       case 'setWbsTotal': result = apiSetWbsTotal_(data); break;
+      case 'setOper': result = apiSetOper_(data); break;
+      case 'editWbs': result = apiEditWbs_(data); break;
       default: throw new Error('ไม่รู้จัก action: ' + req.action);
     }
     return json_({ ok: true, result: result });
@@ -109,6 +137,8 @@ function apiGetBudgets_() {
       allocation: allocation, paid: paid, balance: round2(allocation - paid),
       workName: r[9] || '', // ชื่องาน (กรอกครั้งเดียวตอน import → prefill ตอนเปิดใบตัด)
       wbsTotal: (r[10] === '' || r[10] === undefined || r[10] === null) ? null : Number(r[10]), // ยอดจัดสรรรวมทั้ง WBS
+      fileCode: r[11] || '', // รหัสแฟ้ม KCE## (1 WBS = 1 รหัส)
+      oper: r[12] || '', // ผู้ดำเนินการ (กฟภ. หรือชื่อบริษัท)
       imported: r[7] ? new Date(r[7]).toISOString() : '', // วันที่ import (ใช้จัดกลุ่มแฟ้มตามวันที่สร้าง)
     };
   });
@@ -155,14 +185,22 @@ function apiImportBudget_(data) {
     // ยอดจัดสรรรวมทั้ง WBS (ดึงจากบรรทัดสรุป best-effort — null ถ้าไฟล์นี้ไม่มีบรรทัด → กรอกมือทีหลัง)
     var wbsTotal = (data.wbsTotal === null || data.wbsTotal === undefined || data.wbsTotal === '') ? '' : Number(data.wbsTotal);
 
+    // รหัสแฟ้ม: WBS เดิม → รหัสเดิม, WBS ใหม่ → รันเลขถัดไป (backfill แถวเก่าที่ยังไม่มีด้วย)
+    var wbs = (data.budgets && data.budgets[0]) ? data.budgets[0].wbs : '';
+    var fc = ensureFileCodes_(bTab.sh);
+    var fileCode = wbs ? (fc.map[wbs] || 'KCE' + pad2_(fc.maxNum + 1)) : '';
+
+    var oper = data.oper || ''; // ผู้ดำเนินการ: "กฟภ." หรือชื่อบริษัท
+
     // เพิ่มคีย์ใหม่
     cls.toAdd.forEach(function (b) {
       // นำหน้า act ด้วย ' บังคับ Sheet เก็บเป็น text ไม่ตัด leading zero (คอลัมน์เลขกิจกรรมโชว์ 0020)
-      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '', wbsTotal]);
+      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '', wbsTotal, fileCode, oper]);
     });
+    // WBS เดิม (re-import) → เซ็ตผู้ดำเนินการทุกแถวถ้าส่งค่ามา
+    if (oper && wbs) setColForWbs_(bTab.sh, wbs, 13, oper);
 
     // เติมยอดจัดสรรรวมให้ทุกแถวของ WBS นี้ (กรณี re-import ไฟล์สรุปหลังไฟล์อื่น) — เฉพาะเมื่อดึงได้
-    var wbs = (data.budgets && data.budgets[0]) ? data.budgets[0].wbs : '';
     if (wbsTotal !== '' && wbs) setColForWbs_(bTab.sh, wbs, 11, wbsTotal);
 
     // อัปเดตที่ยืนยันแล้ว + log ประวัติแก้งบ (ledger เดิมไม่แตะ)
@@ -239,6 +277,48 @@ function apiSetWbsTotal_(data) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// เปลี่ยนผู้ดำเนินการทั้งแฟ้ม (ข้อ 5) — data = { wbs, oper }
+function apiSetOper_(data) {
+  var wbs = data.wbs, oper = String(data.oper || '').trim();
+  if (!wbs) throw new Error('ไม่ระบุหมายเลขงาน (WBS)');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var n = setColForWbs_(ss_().getSheetByName(TABS.budget), wbs, 13, oper);
+    if (!n) throw new Error('ไม่พบก้อนงบของ WBS: ' + wbs);
+    return { wbs: wbs, oper: oper, rows: n };
+  } finally { lock.releaseLock(); }
+}
+
+// แก้ WBS ทั้งแฟ้ม (ข้อ 3 — กรณีอ่านผิด) — เปลี่ยน budget (คีย์+WBS) + ledger (คีย์) + log ประวัติ
+// data = { oldWbs, newWbs }
+function apiEditWbs_(data) {
+  var oldWbs = String(data.oldWbs || '').trim(), newWbs = String(data.newWbs || '').trim();
+  if (!oldWbs || !newWbs) throw new Error('ต้องระบุ WBS เดิมและใหม่');
+  if (oldWbs === newWbs) return { changed: 0 };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var bSh = ss_().getSheetByName(TABS.budget);
+    var bv = bSh.getDataRange().getValues(), bn = 0;
+    for (var i = 1; i < bv.length; i++) {
+      if (bv[i][1] === oldWbs) {
+        bSh.getRange(i + 1, 1).setValue(String(bv[i][0]).replace(oldWbs, newWbs)); // คีย์ = wbs|net|act
+        bSh.getRange(i + 1, 2).setValue(newWbs);
+        bn++;
+      }
+    }
+    if (!bn) throw new Error('ไม่พบก้อนงบของ WBS: ' + oldWbs);
+    var lSh = ss_().getSheetByName(TABS.ledger); // คีย์ในใบตัดขึ้นต้นด้วย wbs|
+    var lv = lSh.getDataRange().getValues();
+    for (var j = 1; j < lv.length; j++) {
+      if (String(lv[j][1]).split('|')[0] === oldWbs) lSh.getRange(j + 1, 2).setValue(String(lv[j][1]).replace(oldWbs, newWbs));
+    }
+    ss_().getSheetByName(TABS.revision).appendRow([oldWbs, oldWbs, newWbs, new Date(), 'แก้ WBS', Session.getActiveUser().getEmail()]);
+    return { changed: bn, oldWbs: oldWbs, newWbs: newWbs };
+  } finally { lock.releaseLock(); }
 }
 
 // เซ็ตค่าใน 1 คอลัมน์ให้ทุกแถวที่ WBS (คอลัมน์ 2) ตรง — คืนจำนวนแถวที่แก้
@@ -384,9 +464,15 @@ function apiMakePdf_(slipNo) {
     CHK_VEH: ck_(chk.VEH), CHK_TRV: ck_(chk.TRV), CHK_CRN: ck_(chk.CRN), CHK_CRT: ck_(chk.CRT),
     CHK_DLY: ck_(chk.DLY), CHK_CON: ck_(chk.CON), CHK_OIL: ck_(chk.OIL), CHK_OTH: ck_(chk.OTH),
     CRN_NAME: extra.crnName || '', CRT_NAME: extra.crtName || '',
-    DLY_DATE: thaiDateShort_(extra.dlyDate), DLY_TEAM: extra.dlyTeam || '', // วันที่ไทย
+    DLY_TEAM: extra.dlyTeam || '',
     CON_NO: row[9] || '', CON_DATE: thaiDateShort_(row[14]), // สัญญาจ้างที่ + ลว. (ไทย)
     APD: thaiDateShort_(extra.apd), // อนุมัติ ลว. (ไทย) — override APV/APD ด้านบน
+    NODE: extractNode_(bud.wbs), OPER: bud.oper || '', // โหนด (ข้อ 4) + ผู้ดำเนินการ (ข้อ 5)
+    FCODE: bud.fileCode || '', // รหัสแฟ้ม KCE## บนหัวใบตัด (ข้อ 1)
+    // ช่วงวันที่ค่าแรง 2 ช่อง (ข้อ 2) — from-to วันที่ไทยสั้น
+    CRN_FROM: thaiDateShort_(extra.crnFrom), CRN_TO: thaiDateShort_(extra.crnTo),
+    CRT_FROM: thaiDateShort_(extra.crtFrom), CRT_TO: thaiDateShort_(extra.crtTo),
+    DLY_FROM: thaiDateShort_(extra.dlyFrom), DLY_TO: thaiDateShort_(extra.dlyTo),
   };
 
   var tmplId = PROP.getProperty('TEMPLATE_DOC_ID');
@@ -409,6 +495,12 @@ function apiMakePdf_(slipNo) {
     filename: 'ใบตัดงบ_งวด' + period + '_' + key.replace(/\|/g, '-') + '.pdf',
     b64: Utilities.base64Encode(blob.getBytes()),
   };
+}
+
+// เลขโหนดท้าย WBS เช่น .02.2 → "02.2" ('' ถ้าไม่มี) — ข้อ 4
+function extractNode_(wbs) {
+  var m = String(wbs || '').match(/\.(\d{2}\.\d)$/);
+  return m ? m[1] : '';
 }
 
 // แยกจำนวนเงินเป็น { baht: "12,345", sat: "60" }

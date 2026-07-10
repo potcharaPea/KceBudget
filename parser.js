@@ -16,7 +16,7 @@ export const CATEGORIES = [
 const NUM_RE = /^-?[\d,]+\.\d{2}$/;      // ตัวเลขเงิน เช่น 22,705.44 / 0.00
 const NET_RE = /^\d{10}$/;               // หมายเลขโครงข่าย 10 หลัก เช่น 7001189571
 const DEPT_RE = /^[A-Z]{2}-[A-Z]-[A-Z]$/; // รหัสแผนก เช่น HT-C-E
-const WBS_RE = /^I-\d{2}-[A-Z]-[A-Z0-9.]+$/; // WBS เช่น I-69-E-KCE69.M4.1104
+const WBS_RE = /^[A-Z]-\d{2}-[A-Z]-[A-Z0-9]+\.[A-Z0-9.]+$/; // WBS ทุก format เช่น I-69-E-KCE69.M4.1104, C-68-E-KCECS.0080.02.2
 
 const toNum = (s) => parseFloat(s.replace(/,/g, ''));
 

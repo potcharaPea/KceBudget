@@ -117,7 +117,21 @@
   .fc-wbs { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--primary); }
   .fc-badge { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 20px; }
   .fc-badge.none { background: var(--err-soft); color: var(--err); } .fc-badge.part { background: var(--warn-soft); color: var(--warn); } .fc-badge.done { background: var(--ok-soft); color: var(--ok); }
+  .fc-tag { display: inline-block; font-size: 11px; font-weight: 600; color: var(--primary); background: var(--primary-soft); padding: 1px 8px; border-radius: 6px; margin-bottom: 8px; }
   .fc-meta { font-size: 12px; color: var(--muted); margin-bottom: 9px; }
+  /* ปุ่มแก้เล็กๆ ในหัวเรื่อง (แก้ WBS) */
+  .link-edit { background: none; border: none; color: var(--primary); font-family: inherit; font-size: 11px; cursor: pointer; padding: 0 2px; vertical-align: middle; }
+  .link-edit:hover { text-decoration: underline; }
+  .link-edit .ic { width: 13px; height: 13px; margin-right: 2px; }
+  /* ตัวกรองหน้าค้นหางบที่เหลือ (ข้อ 6) */
+  .rc-filters { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 16px; }
+  .rc-group { display: flex; flex-direction: column; gap: 7px; }
+  .rc-lbl { font-size: 11px; font-weight: 700; color: var(--kicker); text-transform: uppercase; letter-spacing: .04em; }
+  .rc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rc-chip { font-size: 12px; padding: 5px 11px; border-radius: 20px; cursor: pointer; border: 1px solid var(--line-strong); color: var(--muted); background: var(--card); user-select: none; }
+  .rc-chip.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  #remainOut tbody tr { cursor: pointer; }
+  #remainOut thead th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
   .fc-bar { height: 5px; background: var(--line); border-radius: 20px; overflow: hidden; margin-bottom: 9px; }
   .fc-bar > i { display: block; height: 100%; background: var(--primary); border-radius: 20px; }
   .fc-stats { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
@@ -274,7 +288,7 @@
   /* รายการค่าใช้จ่ายหน้างาน (checkbox หน้างาน) */
   .chklist { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--input-bd); border-radius: 8px; }
   .chk { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); margin: 0; font-weight: 400; cursor: pointer; }
-  .field .chk input[type=checkbox] { width: auto; padding: 0; margin: 0; flex: none; }
+  .field .chk input[type=checkbox], .field .chk input[type=radio] { width: auto; padding: 0; margin: 0; flex: none; }
   /* ช่องรายละเอียดของแต่ละรายการ — เยื้องเข้ามาใต้ checkbox, label+input ไม่แตกบรรทัด */
   .chk-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-left: 26px; margin: -1px 0 3px; }
   .minl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 400; margin: 0; white-space: nowrap; }
@@ -319,6 +333,7 @@
       <nav class="menu" id="menu">
         <button class="menu-item active" data-panel="files"><span class="mi-ico"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/></svg></span> เลือกแฟ้มงาน</button>
         <button class="menu-item" data-panel="pending"><span class="mi-ico"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 1.8"/></svg></span> แฟ้มที่ยังไม่ตัดงบ<span class="mi-badge" id="pendCount"></span></button>
+        <button class="menu-item" data-panel="remaining"><span class="mi-ico"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></span> ค้นหางบที่เหลือ</button>
         <button class="menu-item" data-panel="dashboard"><span class="mi-ico"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/><path d="M4 20h16"/></svg></span> Dashboard สถานะงาน</button>
       </nav>
 
@@ -335,7 +350,7 @@
       <!-- เลือกแฟ้มงาน (หน้าแรก) -->
       <section id="panel-files" class="panel active">
         <div class="page-head"><h2>เลือกแฟ้มงาน</h2><p>คลิกแฟ้ม (WBS) เพื่อเข้าดูงบและเปิดใบตัด — จัดกลุ่มตามวันที่สร้าง</p></div>
-        <div class="search-wrap"><svg class="search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg><input id="search" placeholder="ค้นหาแฟ้ม / WBS…"></div>
+        <div class="search-wrap"><svg class="search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg><input id="search" placeholder="ค้นหารหัสแฟ้ม / WBS…"></div>
         <div id="filesOut"></div>
       </section>
 
@@ -343,6 +358,12 @@
       <section id="panel-pending" class="panel">
         <div class="page-head"><h2>แฟ้มที่ยังไม่ตัดงบ</h2><p>แฟ้มที่นำเข้าแล้วแต่ยังไม่เปิดใบตัดเลย</p></div>
         <div id="pendingOut"></div>
+      </section>
+
+      <!-- ค้นหางบที่เหลือ -->
+      <section id="panel-remaining" class="panel">
+        <div class="page-head"><h2>ค้นหางบที่เหลือ</h2><p>หมวดงบที่ยังมีคงเหลือ &gt; 0 และ WBS ยังมีงบรวมเหลือ — กรองตามหมวด/ผู้ดำเนินการ แล้วกดเปิดใบตัด</p></div>
+        <div id="remainOut"></div>
       </section>
 
       <!-- Dashboard -->

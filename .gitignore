@@ -2,8 +2,15 @@ node_modules/
 
 # ข้อมูลจริง/ภายใน PEA — ห้าม push ขึ้น repo สาธารณะ
 ตัวอย่าง zpsr018*.pdf
+11 02.2*.pdf
+ตัวอย่างใบตัดงบ.doc
 นำเสนอแอป/
 KCE App Icon.dc.html
+
+# Word lock + ไฟล์ทดสอบ PDF ในเครื่อง (prefix _)
+~$*
+_*.pdf
+_*.docx
 
 # ไฟล์ชั่วคราวตอนทดสอบ API/PDF
 resp_*.json
