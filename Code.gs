@@ -92,6 +92,7 @@ function doPost(e) {
       case 'getSlips': result = apiGetSlips_(data.key); break;
       case 'makePdf': result = apiMakePdf_(data.slipNo); break;
       case 'deleteFile': result = apiDeleteFile_(data); break;
+      case 'deleteNetwork': result = apiDeleteNetwork_(data); break;
       case 'addDriver': result = apiAddSetting_('พขร.', data.name); break;
       case 'addRequester': result = apiAddSetting_('ผู้เบิก', data.name); break;
       case 'addCompany': result = apiAddSetting_('บริษัท', data.name); break;
@@ -246,6 +247,25 @@ function apiDeleteFile_(data) {
     var wbs = data.wbs;
     var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return r[1] === wbs; });
     var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) { return String(r[1]).split('|')[0] === wbs; });
+    return { budgets: budgets, slips: slips };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ลบเลขโครงข่ายเดียวในแฟ้ม — งบทุกหมวด + ใบตัดทุกใบของโครงข่ายนั้น (ยืนยันด้วยรหัสผ่าน)
+// data = { wbs, network, password }
+function apiDeleteNetwork_(data) {
+  if (String(data.password) !== '509758') throw new Error('รหัสผ่านไม่ถูกต้อง');
+  if (!data.wbs || !data.network) throw new Error('ไม่ระบุหมายเลขงาน (WBS) หรือโครงข่าย');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var wbs = data.wbs, net = data.network;
+    var budgets = deleteRowsWhere_(ss_().getSheetByName(TABS.budget), function (r) { return r[1] === wbs && r[2] === net; });
+    var slips = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) {
+      var p = String(r[1]).split('|'); return p[0] === wbs && p[1] === net; // คีย์ = wbs|network|act
+    });
     return { budgets: budgets, slips: slips };
   } finally {
     lock.releaseLock();

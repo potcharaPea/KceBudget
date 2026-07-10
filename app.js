@@ -678,7 +678,8 @@ function renderDetail() {
   shown.forEach((b) => { (byNet[b.network + '|' + b.dept] = byNet[b.network + '|' + b.dept] || []).push(b); });
   for (const grp of Object.keys(byNet)) {
     const [network, dept] = grp.split('|');
-    html += `<div class="net"><h2>โครงข่าย ${esc(network)}<span class="dept">${esc(dept)}</span></h2>
+    html += `<div class="net"><h2>โครงข่าย ${esc(network)}<span class="dept">${esc(dept)}</span>
+        <button class="btn sec net-del" data-delnet="${esc(network)}" style="color:var(--err);padding:5px 10px;font-size:12px">${ic('trash')}ลบโครงข่าย</button></h2>
       <table><thead><tr><th>หมวดงบ</th><th>เลขกิจ</th><th class="num">ยอดจัดสรร</th><th class="num">จ่ายแล้ว</th><th class="num">คงเหลือ</th><th></th></tr></thead><tbody>`;
     for (const b of byNet[grp]) {
       const i = budgets.indexOf(b);
@@ -698,6 +699,8 @@ function renderDetail() {
   $('editWbsTotal').addEventListener('click', () => editWbsTotal(selectedWbs, j.wbsTotal));
   $('editOper').addEventListener('click', () => editOper(selectedWbs, j.oper));
   $('editWbs').addEventListener('click', () => editWbs(selectedWbs));
+  document.querySelectorAll('[data-delnet]').forEach((btn) =>
+    btn.addEventListener('click', () => askDeleteNetwork(selectedWbs, btn.dataset.delnet)));
   document.querySelectorAll('[data-cut]').forEach((btn) =>
     btn.addEventListener('click', () => openSlip(budgets[+btn.dataset.cut])));
   document.querySelectorAll('[data-sum]').forEach((btn) =>
@@ -831,6 +834,54 @@ async function doDeleteFile(wbs) {
   } catch (err) {
     btn.disabled = false;
     $('delErr').textContent = err.message;
+  }
+}
+
+// ---------- ลบเลขโครงข่าย (ยืนยัน 2 ชั้น + รหัสผ่าน) ----------
+function askDeleteNetwork(wbs, network) {
+  const shown = budgets.filter((b) => b.wbs === wbs && b.network === network);
+  const hasCut = shown.some((b) => b.paid > 0);
+  $('modalBox').innerHTML = `<h3><span style="color:var(--err)">${ic('alert')}</span>ลบเลขโครงข่าย</h3>
+    <div class="sub">โครงข่าย <b>${esc(network)}</b> ในแฟ้ม <b>${esc(wbs)}</b></div>
+    <div class="warn" style="margin:12px 0">จะลบก้อนงบ ${shown.length} หมวด${hasCut ? ' + ใบตัดทุกใบของโครงข่ายนี้' : ''} ออกถาวร — กู้คืนไม่ได้</div>
+    <div class="modal-actions">
+      <button class="btn sec" id="dnCancel">ยกเลิก</button>
+      <button class="btn" id="dnNext" style="background:var(--err)">ดำเนินการต่อ →</button>
+    </div>`;
+  $('modal').classList.add('show');
+  $('dnCancel').addEventListener('click', closeModal);
+  $('dnNext').addEventListener('click', () => askDeleteNetworkPassword(wbs, network));
+}
+
+function askDeleteNetworkPassword(wbs, network) {
+  $('modalBox').innerHTML = `<h3>${ic('lock')}ยืนยันการลบ</h3>
+    <div class="sub">ใส่รหัสผ่านเพื่อลบโครงข่าย <b>${esc(network)}</b> ถาวร</div>
+    <div class="field" style="margin-top:12px"><label>รหัสผ่าน</label>
+      <input type="password" id="dnPw" autocomplete="off"></div>
+    <div id="dnErr" class="err"></div>
+    <div class="modal-actions">
+      <button class="btn sec" id="dnCancel2">ยกเลิก</button>
+      <button class="btn" id="dnDo" style="background:var(--err)">${ic('trash')}ลบถาวร</button>
+    </div>`;
+  $('dnCancel2').addEventListener('click', closeModal);
+  $('dnDo').addEventListener('click', () => doDeleteNetwork(wbs, network));
+  $('dnPw').focus();
+}
+
+async function doDeleteNetwork(wbs, network) {
+  if ($('dnPw').value !== '509758') { $('dnErr').textContent = 'รหัสผ่านไม่ถูกต้อง'; return; }
+  const btn = $('dnDo'); btn.disabled = true; $('dnErr').textContent = '';
+  try {
+    const r = await callApi('deleteNetwork', { wbs, network, password: $('dnPw').value });
+    closeModal();
+    await loadBudgets();
+    const flash = `<div class="flash ok">${ic('check')}ลบโครงข่าย ${esc(network)} แล้ว (งบ ${r.budgets} หมวด, ใบตัด ${r.slips} ใบ)</div>`;
+    // ถ้าลบโครงข่ายสุดท้าย → แฟ้มว่าง กลับหน้าเลือกแฟ้ม; ไม่งั้นอยู่หน้ารายละเอียดเดิม
+    if (budgets.some((b) => b.wbs === wbs)) { $('detailOut').insertAdjacentHTML('afterbegin', flash); }
+    else { goPanel('files'); $('filesOut').insertAdjacentHTML('afterbegin', flash); }
+  } catch (err) {
+    btn.disabled = false;
+    $('dnErr').textContent = err.message;
   }
 }
 
