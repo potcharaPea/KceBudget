@@ -5,27 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PEA Budget กฟส.คำชะอี</title>
 <link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#ff385c">
+<meta name="theme-color" content="#f7a501">
 <link rel="apple-touch-icon" href="./icon.svg">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  /* ===== Airbnb-flavored tokens (light) ===== */
+  /* ===== PostHog-flavored tokens (light) — พื้นครีม หมึกโอลีฟ ปุ่มเหลืองส้ม ===== */
   :root {
-    --font: "Airbnb Cereal VF", Circular, -apple-system, system-ui, "Segoe UI", "Leelawadee UI", Tahoma, sans-serif;
-    --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
-    --primary: #ff385c; --primary-dark: #e00b41; --primary-soft: #ffe8ec;
-    --ink: #222222; --muted: #6a6a6a; --kicker: #929292;
-    --line: #ebebeb; --line-strong: #dddddd;
-    --bg: #f7f7f7; --card: #ffffff; --surface-soft: #f2f2f2;
-    --input-bd: #dddddd;
-    --ok: #1a8f4c; --err: #c13515; --warn: #b45309;
-    --ok-soft: #e9f7ef; --ok-bd: #bfe6cf;
-    --err-soft: #fdecea; --err-bd: #f5c6bd;
-    --warn-soft: #fff6e6; --warn-bd: #f3d9a6;
-    --scrim: rgba(0,0,0,.5);
-    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
-    --shadow-hover: rgba(0,0,0,.02) 0 0 0 1px, rgba(0,0,0,.04) 0 2px 6px, rgba(0,0,0,.12) 0 6px 16px;
-    --radius: 14px; --side: 300px;
+    --font: "IBM Plex Sans Thai", "IBM Plex Sans", -apple-system, system-ui, "Segoe UI", "Leelawadee UI", Tahoma, sans-serif;
+    --mono: "Source Code Pro", ui-monospace, "Cascadia Mono", "Consolas", monospace;
+    --primary: #f7a501; --primary-dark: #dd9001; --primary-soft: #fdeecb;
+    --ink: #23251d; --muted: #6c6e63; --kicker: #9b9c92;
+    --line: #dcdfd2; --line-strong: #bfc1b7;
+    --bg: #eeefe9; --card: #ffffff; --surface-soft: #e5e7e0;
+    --input-bd: #bfc1b7;
+    --ok: #2c8c66; --err: #cd4239; --warn: #b17816;
+    --ok-soft: #d9eddf; --ok-bd: #a9d3ba;
+    --err-soft: #f7d6d3; --err-bd: #e8a9a3;
+    --warn-soft: #fdeecb; --warn-bd: #eccf8f;
+    /* accent family — สีสันสำหรับไฮไลต์ข้อมูลสำคัญ */
+    --acc-blue: #2c84e0; --acc-blue-soft: #dceaf6;
+    --acc-green: #2c8c66; --acc-green-soft: #d9eddf;
+    --acc-purple: #7c44a6; --acc-purple-soft: #e7d8ee;
+    --acc-red: #cd4239; --acc-red-soft: #f7d6d3;
+    --link: #1078a3;
+    --scrim: rgba(35,37,29,.5);
+    --shadow: 0 1px 2px rgba(35,37,29,.05), 0 4px 12px rgba(35,37,29,.06);
+    --shadow-hover: rgba(35,37,29,.03) 0 0 0 1px, rgba(35,37,29,.05) 0 2px 6px, rgba(35,37,29,.12) 0 8px 18px;
+    --radius: 10px; --side: 300px;
     --ease: cubic-bezier(.4, 0, .2, 1);
   }
   /* inline SVG icons */
@@ -36,20 +45,25 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   button:focus:not(:focus-visible) { outline: none; }
-  /* ===== Dark mode — ชุดเดียวกัน คนละพื้นผิว (Rausch คงไว้) ===== */
+  /* ===== Dark mode — โอลีฟเข้ม พื้น #23251d ปุ่มเหลืองคงไว้ ===== */
   :root[data-theme="dark"] {
-    --primary: #ff5a76; --primary-dark: #ff385c; --primary-soft: #3a1e25;
-    --ink: #f2f2f2; --muted: #a7a7ad; --kicker: #8a8a90;
-    --line: #2c2c30; --line-strong: #3a3a40;
-    --bg: #161618; --card: #1f1f22; --surface-soft: #26262a;
-    --input-bd: #3a3a40;
-    --ok: #4ade80; --err: #ff6b57; --warn: #f0b429;
-    --ok-soft: #16281d; --ok-bd: #24513a;
-    --err-soft: #2c1815; --err-bd: #5a2a22;
-    --warn-soft: #2a2212; --warn-bd: #55461f;
+    --primary: #f7a501; --primary-dark: #dd9001; --primary-soft: #3a3416;
+    --ink: #edeee6; --muted: #a3a598; --kicker: #86887c;
+    --line: #33352c; --line-strong: #43463a;
+    --bg: #1b1c16; --card: #23251d; --surface-soft: #2c2e25;
+    --input-bd: #43463a;
+    --ok: #6fca9f; --err: #ef8078; --warn: #e0b45f;
+    --ok-soft: #1b3227; --ok-bd: #2f5240;
+    --err-soft: #3a1f1c; --err-bd: #5f322d;
+    --warn-soft: #33290f; --warn-bd: #574821;
+    --acc-blue: #6fb0ef; --acc-blue-soft: #1c3247;
+    --acc-green: #6fca9f; --acc-green-soft: #1b3227;
+    --acc-purple: #c194de; --acc-purple-soft: #2f2140;
+    --acc-red: #ef8078; --acc-red-soft: #3a1f1c;
+    --link: #66c2e6;
     --scrim: rgba(0,0,0,.65);
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.5);
-    --shadow-hover: 0 0 0 1px rgba(255,255,255,.06), 0 6px 18px rgba(0,0,0,.6);
+    --shadow-hover: 0 0 0 1px rgba(255,255,255,.05), 0 8px 20px rgba(0,0,0,.6);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -331,6 +345,44 @@
     #modal .box { padding: 18px; }
     .row-actions { flex-wrap: wrap; }
   }
+
+  /* ============================================================
+     PostHog polish — ปุ่ม / ไฮไลต์ข้อมูลสำคัญ / สีสัน accent
+     (ต่อท้าย = ชนะ source order, ไม่ต้องแตะ class ใน app.js)
+     ============================================================ */
+  :root { --hi: #b17816; }
+  :root[data-theme="dark"] { --hi: #e0b45f; }
+
+  /* ปุ่มหลัก = เหลืองส้ม + อักษรหมึกเข้ม (on-primary #23251d) */
+  .btn { color: var(--ink); font-weight: 600; }
+  .btn:hover { box-shadow: 0 4px 14px rgba(247,165,1,.30); }
+  .btn.sec, .btn:disabled { color: var(--ink); }
+  .btn[style*="--err"] { color: #fff; }        /* ปุ่มลบพื้นแดง → อักษรขาว */
+  .logo { color: var(--ink) !important; box-shadow: 0 4px 12px rgba(247,165,1,.32) !important; }
+
+  /* ข้อความไฮไลต์สำคัญ — ทองอ่านง่าย แทนเหลืองจางที่อ่านยากบนขาว */
+  .fc-wbs, .nb-wbs, td.act, .mono, .net h2 .dept, .drop-btn, .link-edit,
+  .menu-item.active, .menu-item.active .mi-ico,
+  .fc-tab.on, .rc-chip.on, .seg button.on { color: var(--hi); }
+
+  /* KPI — แถบสีบนไล่หลากสี (ฟ้า/เหลือง/ม่วง/เขียว) + semantic ทับได้ */
+  .kpis .kpi { border-top: 3px solid var(--line-strong); }
+  .kpis .kpi:nth-child(4n+1) { border-top-color: var(--acc-blue); }
+  .kpis .kpi:nth-child(4n+2) { border-top-color: var(--primary); }
+  .kpis .kpi:nth-child(4n+3) { border-top-color: var(--acc-purple); }
+  .kpis .kpi:nth-child(4n+4) { border-top-color: var(--acc-green); }
+  .kpis .kpi.ok { border-top-color: var(--ok); }
+  .kpis .kpi.err { border-top-color: var(--err); }
+
+  /* การ์ดกราฟ / ยอดจัดสรร — แถบข้างสี + หัวตารางนวลครีม */
+  .chart-card { border-left: 4px solid var(--acc-blue); }
+  .wbs-total { border-left: 4px solid var(--primary); }
+  th { background: var(--surface-soft); }
+
+  /* ไฮไลต์ยอดเงินสำคัญ (คงเหลือรวม/ในฟอร์มใบตัด) */
+  .balrow.big b { color: var(--hi); font-size: 1.05em; }
+  .balrow.big b.err { color: var(--err); }
+  .fc-stats b, .kpi .v, .wbs-total .v { letter-spacing: -.02em; }
 </style>
 </head>
 <body>

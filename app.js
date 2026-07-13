@@ -1037,17 +1037,63 @@ async function openSummary(b) {
   try {
     const slips = await callApi('getSlips', { key: b.key });
     if (!slips.length) { $('sumList').innerHTML = '<div class="card">ยังไม่มีงวดในคีย์นี้</div>'; return; }
-    let html = `<table><thead><tr><th>งวด</th><th>วันที่</th><th class="num">จ่าย</th><th class="num">คงเหลือ</th><th>PDF</th></tr></thead><tbody>`;
+    let html = `<table><thead><tr><th>งวด</th><th>วันที่</th><th class="num">จ่าย</th><th class="num">คงเหลือ</th><th>จัดการ</th></tr></thead><tbody>`;
     slips.forEach((s) => {
       html += `<tr><td>${esc(s.period)}</td><td>${esc(s.date)}</td>
         <td class="num">${fmt(s.payNow)}</td><td class="num">${fmt(s.balance)}</td>
-        <td><button class="btn sec" data-pdf="${esc(s.slipNo)}">${ic('download')}ออก PDF</button></td></tr>`;
+        <td><div class="row-actions"><button class="btn sec" data-pdf="${esc(s.slipNo)}">${ic('download')}PDF</button>
+          <button class="btn sec" data-delslip="${esc(s.slipNo)}" style="color:var(--err)">${ic('trash')}ลบ</button></div></td></tr>`;
     });
     $('sumList').innerHTML = html + '</tbody></table>';
     document.querySelectorAll('[data-pdf]').forEach((btn) =>
       btn.addEventListener('click', () => makePdf(btn)));
+    document.querySelectorAll('[data-delslip]').forEach((btn) =>
+      btn.addEventListener('click', () => askDeleteSlip(slips.find((s) => String(s.slipNo) === btn.dataset.delslip), b)));
   } catch (err) {
     $('sumList').innerHTML = `<div class="err">โหลดงวดไม่สำเร็จ: ${esc(err.message)}</div>`;
+  }
+}
+
+// ---------- ลบใบตัดงบผิด (ย้อนกลับได้ทีละใบ — ยอดจ่ายคืนเข้าคงเหลือ, ยืนยัน 2 ชั้น + รหัสผ่าน) ----------
+function askDeleteSlip(s, b) {
+  if (!s) return;
+  $('modalBox').innerHTML = `<h3><span style="color:var(--err)">${ic('alert')}</span>ลบใบตัดงบ (งวด ${esc(s.period)})</h3>
+    <div class="sub">${esc(b.category)} • จ่าย ${fmt(s.payNow)} บาท • วันที่ ${esc(s.date)}</div>
+    <div class="warn" style="margin:12px 0">จะลบใบตัดนี้ถาวร — ยอด ${fmt(s.payNow)} บาท จะคืนกลับเข้าคงเหลือ (กู้คืนใบไม่ได้)</div>
+    <div class="modal-actions">
+      <button class="btn sec" id="dsCancel">ยกเลิก</button>
+      <button class="btn" id="dsNext" style="background:var(--err)">ดำเนินการต่อ →</button>
+    </div>`;
+  $('dsCancel').addEventListener('click', () => openSummary(b)); // กลับไปหน้าสรุปเดิม
+  $('dsNext').addEventListener('click', () => askDeleteSlipPassword(s, b));
+}
+
+function askDeleteSlipPassword(s, b) {
+  $('modalBox').innerHTML = `<h3>${ic('lock')}ยืนยันการลบ</h3>
+    <div class="sub">ใส่รหัสผ่านเพื่อลบใบตัดงบ <b>งวด ${esc(s.period)}</b> (จ่าย ${fmt(s.payNow)} บาท) ถาวร</div>
+    <div class="field" style="margin-top:12px"><label>รหัสผ่าน</label><input type="password" id="dsPw" autocomplete="off"></div>
+    <div id="dsErr" class="err"></div>
+    <div class="modal-actions">
+      <button class="btn sec" id="dsCancel">ยกเลิก</button>
+      <button class="btn" id="dsDo" style="background:var(--err)">${ic('trash')}ลบถาวร</button>
+    </div>`;
+  $('dsCancel').addEventListener('click', () => openSummary(b));
+  $('dsDo').addEventListener('click', () => doDeleteSlip(s.slipNo, b));
+  $('dsPw').focus();
+}
+
+async function doDeleteSlip(slipNo, b) {
+  if ($('dsPw').value !== '509758') { $('dsErr').textContent = 'รหัสผ่านไม่ถูกต้อง'; return; }
+  const btn = $('dsDo'); btn.disabled = true; $('dsErr').textContent = '';
+  try {
+    await callApi('deleteSlip', { slipNo, password: $('dsPw').value });
+    await loadBudgets(); // paid/คงเหลือคำนวณใหม่ + หน้ารายละเอียดหลัง modal อัปเดต
+    const fresh = budgets.find((x) => x.key === b.key);
+    if (fresh) openSummary(fresh); // เปิดสรุปใหม่ให้เห็นงวดที่เหลือ + ยอดอัปเดต
+    else closeModal();
+  } catch (err) {
+    btn.disabled = false;
+    $('dsErr').textContent = err.message;
   }
 }
 

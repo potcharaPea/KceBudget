@@ -99,6 +99,7 @@ function doPost(e) {
       case 'createSlip': result = apiCreateSlip_(data); break;
       case 'getSlips': result = apiGetSlips_(data.key); break;
       case 'makePdf': result = apiMakePdf_(data.slipNo); break;
+      case 'deleteSlip': result = apiDeleteSlip_(data); break;
       case 'deleteFile': result = apiDeleteFile_(data); break;
       case 'deleteFileAll': result = apiDeleteFileAll_(data); break;
       case 'deleteNetwork': result = apiDeleteNetwork_(data); break;
@@ -246,6 +247,22 @@ function nextSlipNo_(sh) {
   var v = sh.getDataRange().getValues(), max = 0;
   for (var i = 1; i < v.length; i++) { var n = Number(v[i][0]); if (n > max) max = n; }
   return max + 1;
+}
+
+// ลบใบตัดงบ 1 ใบ (กรณีตัดงบผิด) — ลบแถวใน ledger ตาม slipNo → paid/คงเหลือคำนวณใหม่อัตโนมัติ
+// data = { slipNo, password }
+function apiDeleteSlip_(data) {
+  if (String(data.password) !== '509758') throw new Error('รหัสผ่านไม่ถูกต้อง');
+  if (data.slipNo === '' || data.slipNo === null || data.slipNo === undefined) throw new Error('ไม่ระบุเลขที่ใบตัด');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var n = deleteRowsWhere_(ss_().getSheetByName(TABS.ledger), function (r) { return String(r[0]) === String(data.slipNo); });
+    if (!n) throw new Error('ไม่พบใบตัดเลขที่ ' + data.slipNo);
+    return { deleted: n };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ลบทั้งแฟ้ม (WBS) — งบทุกหมวด + ใบตัดทุกใบของ WBS นั้น (ยืนยันด้วยรหัสผ่าน)
