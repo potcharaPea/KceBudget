@@ -393,6 +393,7 @@ function apiEditWbs_(data) {
 // แก้หมายเลขโครงข่ายของโครงข่ายเดียวในแฟ้ม (กรณีอ่านผิด) — เปลี่ยน budget (คีย์+col3) + ledger (คีย์)
 // data = { wbs, oldNet, newNet } — คีย์ = wbs|net|act (แยกด้วย | แล้วประกอบใหม่ กันชนกับ act/wbs)
 function apiEditNetwork_(data) {
+  if (String(data.password) !== '509758') throw new Error('รหัสผ่านไม่ถูกต้อง');
   var wbs = String(data.wbs || ''), oldNet = String(data.oldNet || '').trim(), newNet = String(data.newNet || '').trim();
   if (!oldNet) throw new Error('ไม่ระบุโครงข่ายเดิม');
   if (!newNet) throw new Error('ต้องระบุหมายเลขโครงข่ายใหม่');

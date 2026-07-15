@@ -882,7 +882,7 @@ function editWbs(oldWbs) {
   $('ewVal').focus();
 }
 
-// ---------- แก้หมายเลขโครงข่าย (กรณีอ่านผิด) — เปลี่ยนทุกก้อนงบ/ใบตัดของโครงข่ายนี้ ----------
+// ---------- แก้หมายเลขโครงข่าย (ยืนยัน 2 ชั้น + รหัสผ่าน) — เปลี่ยนทุกก้อนงบ/ใบตัดของโครงข่ายนี้ ----------
 function editNetwork(wbs, oldNet) {
   $('modalBox').innerHTML = `<h3>${ic('edit')}แก้หมายเลขโครงข่าย</h3>
     <div class="sub">ของเดิม <b>${esc(oldNet)}</b> ในแฟ้ม <b>${esc(wbs)}</b> — แก้แล้วจะเปลี่ยนทุกก้อนงบ/ใบตัดของโครงข่ายนี้</div>
@@ -891,22 +891,39 @@ function editNetwork(wbs, oldNet) {
     <div id="enErr" class="err"></div>
     <div class="modal-actions">
       <button class="btn sec" id="enCancel">ยกเลิก</button>
-      <button class="btn" id="enSave">${ic('check')}บันทึก</button>
+      <button class="btn" id="enNext">ดำเนินการต่อ →</button>
     </div>`;
   $('modal').classList.add('show');
   $('enCancel').addEventListener('click', closeModal);
-  $('enSave').addEventListener('click', async () => {
+  $('enNext').addEventListener('click', () => {
     const newNet = $('enVal').value.trim();
     if (!newNet) { $('enErr').textContent = 'กรอกหมายเลขโครงข่ายใหม่'; return; }
     if (newNet === oldNet) { closeModal(); return; }
-    const btn = $('enSave'); btn.disabled = true;
+    editNetworkPassword(wbs, oldNet, newNet);
+  });
+  $('enVal').focus();
+}
+
+function editNetworkPassword(wbs, oldNet, newNet) {
+  $('modalBox').innerHTML = `<h3>${ic('lock')}ยืนยันการแก้ไข</h3>
+    <div class="sub">ใส่รหัสผ่านเพื่อเปลี่ยนโครงข่าย <b>${esc(oldNet)}</b> → <b>${esc(newNet)}</b></div>
+    <div class="field" style="margin-top:12px"><label>รหัสผ่าน</label>
+      <input type="password" id="enPw" autocomplete="off"></div>
+    <div id="enErr" class="err"></div>
+    <div class="modal-actions">
+      <button class="btn sec" id="enCancel2">ยกเลิก</button>
+      <button class="btn" id="enSave">${ic('check')}บันทึก</button>
+    </div>`;
+  $('enCancel2').addEventListener('click', closeModal);
+  $('enSave').addEventListener('click', async () => {
+    const btn = $('enSave'); btn.disabled = true; $('enErr').textContent = '';
     try {
-      await callApi('editNetwork', { wbs, oldNet, newNet });
+      await callApi('editNetwork', { wbs, oldNet, newNet, password: $('enPw').value });
       closeModal();
       await loadBudgets();
     } catch (err) { $('enErr').textContent = 'บันทึกไม่สำเร็จ: ' + err.message; btn.disabled = false; }
   });
-  $('enVal').focus();
+  $('enPw').focus();
 }
 
 // ---------- ลบแฟ้มงาน (ยืนยัน 2 ชั้น + รหัสผ่าน) ----------
