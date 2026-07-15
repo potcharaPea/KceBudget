@@ -106,9 +106,11 @@ function doPost(e) {
       case 'addDriver': result = apiAddSetting_('พขร.', data.name); break;
       case 'addRequester': result = apiAddSetting_('ผู้เบิก', data.name); break;
       case 'addCompany': result = apiAddSetting_('บริษัท', data.name); break;
+      case 'addPlate': result = apiAddSetting_('ทะเบียนรถ', data.name); break;
       case 'setWbsTotal': result = apiSetWbsTotal_(data); break;
       case 'setOper': result = apiSetOper_(data); break;
       case 'editWbs': result = apiEditWbs_(data); break;
+      case 'editNetwork': result = apiEditNetwork_(data); break;
       default: throw new Error('ไม่รู้จัก action: ' + req.action);
     }
     return json_({ ok: true, result: result });
@@ -388,6 +390,37 @@ function apiEditWbs_(data) {
   } finally { lock.releaseLock(); }
 }
 
+// แก้หมายเลขโครงข่ายของโครงข่ายเดียวในแฟ้ม (กรณีอ่านผิด) — เปลี่ยน budget (คีย์+col3) + ledger (คีย์)
+// data = { wbs, oldNet, newNet } — คีย์ = wbs|net|act (แยกด้วย | แล้วประกอบใหม่ กันชนกับ act/wbs)
+function apiEditNetwork_(data) {
+  var wbs = String(data.wbs || ''), oldNet = String(data.oldNet || '').trim(), newNet = String(data.newNet || '').trim();
+  if (!oldNet) throw new Error('ไม่ระบุโครงข่ายเดิม');
+  if (!newNet) throw new Error('ต้องระบุหมายเลขโครงข่ายใหม่');
+  if (oldNet === newNet) return { changed: 0 };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var bSh = ss_().getSheetByName(TABS.budget);
+    var bv = bSh.getDataRange().getValues(), bn = 0;
+    for (var i = 1; i < bv.length; i++) {
+      if (String(bv[i][1]) === wbs && String(bv[i][2]) === oldNet) {
+        var p = String(bv[i][0]).split('|'); p[1] = newNet; // คีย์ = wbs|net|act
+        bSh.getRange(i + 1, 1).setValue(p.join('|'));
+        bSh.getRange(i + 1, 3).setValue(newNet);
+        bn++;
+      }
+    }
+    if (!bn) throw new Error('ไม่พบก้อนงบของโครงข่าย: ' + oldNet);
+    var lSh = ss_().getSheetByName(TABS.ledger);
+    var lv = lSh.getDataRange().getValues();
+    for (var j = 1; j < lv.length; j++) {
+      var q = String(lv[j][1]).split('|');
+      if (q[0] === wbs && q[1] === oldNet) { q[1] = newNet; lSh.getRange(j + 1, 2).setValue(q.join('|')); }
+    }
+    return { changed: bn, oldNet: oldNet, newNet: newNet };
+  } finally { lock.releaseLock(); }
+}
+
 // เซ็ตค่าใน 1 คอลัมน์ให้ทุกแถวที่ WBS (คอลัมน์ 2) ตรง — คืนจำนวนแถวที่แก้
 function setColForWbs_(sh, wbs, col, val) {
   var v = sh.getDataRange().getValues(), n = 0;
@@ -531,7 +564,7 @@ function apiMakePdf_(slipNo) {
     CHK_VEH: ck_(chk.VEH), CHK_TRV: ck_(chk.TRV), CHK_CRN: ck_(chk.CRN), CHK_CRT: ck_(chk.CRT),
     CHK_DLY: ck_(chk.DLY), CHK_CON: ck_(chk.CON), CHK_OIL: ck_(chk.OIL), CHK_OTH: ck_(chk.OTH),
     CRN_NAME: extra.crnName || '', CRT_NAME: extra.crtName || '',
-    DLY_TEAM: extra.dlyTeam || '',
+    DLY_TEAM: extra.dlyTeam || '', OIL_PLATE: extra.oilPlate || '', // ทะเบียนรถ ค่าน้ำมันยานพาหนะ
     CON_NO: row[9] || '', CON_DATE: thaiDateShort_(row[14]), // สัญญาจ้างที่ + ลว. (ไทย)
     APD: thaiDateShort_(extra.apd), // อนุมัติ ลว. (ไทย) — override APV/APD ด้านบน
     NODE: nodeLabel_(bud.wbs), OPER: bud.oper || '', // โหนด + งบของ (ข้อ 4) + ผู้ดำเนินการ (ข้อ 5)

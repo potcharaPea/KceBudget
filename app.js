@@ -729,6 +729,7 @@ function renderDetail() {
   document.querySelectorAll('[data-editoper]').forEach((btn) => btn.addEventListener('click', () => editOper(btn.dataset.editoper, budgets.find((b) => b.wbs === btn.dataset.editoper)?.oper || '')));
   document.querySelectorAll('[data-editwt]').forEach((btn) => btn.addEventListener('click', () => editWbsTotal(btn.dataset.editwt, nodeByWbs(btn.dataset.editwt).wbsTotal)));
   document.querySelectorAll('[data-delnode]').forEach((btn) => btn.addEventListener('click', () => askDeleteFile(btn.dataset.delnode)));
+  document.querySelectorAll('[data-editnet]').forEach((btn) => btn.addEventListener('click', () => editNetwork(btn.dataset.wbs, btn.dataset.editnet)));
   document.querySelectorAll('[data-delnet]').forEach((btn) => btn.addEventListener('click', () => askDeleteNetwork(btn.dataset.wbs, btn.dataset.delnet)));
   document.querySelectorAll('[data-cut]').forEach((btn) => btn.addEventListener('click', () => openSlip(budgets[+btn.dataset.cut])));
   document.querySelectorAll('[data-sum]').forEach((btn) => btn.addEventListener('click', () => openSummary(budgets[+btn.dataset.sum])));
@@ -779,6 +780,7 @@ function renderNodeBlock(j, multi) {
   for (const grp of Object.keys(byNet)) {
     const [network, dept] = grp.split('|');
     html += `<div class="net"><h2>โครงข่าย ${esc(network)}<span class="dept">${esc(dept)}</span>
+        <button class="btn sec net-edit" data-editnet="${esc(network)}" data-wbs="${esc(j.wbs)}" style="padding:5px 10px;font-size:12px">${ic('edit')}แก้เลข</button>
         <button class="btn sec net-del" data-delnet="${esc(network)}" data-wbs="${esc(j.wbs)}" style="color:var(--err);padding:5px 10px;font-size:12px">${ic('trash')}ลบโครงข่าย</button></h2>
       <table><thead><tr><th>หมวดงบ</th><th>เลขกิจ</th><th class="num">ยอดจัดสรร</th><th class="num">จ่ายแล้ว</th><th class="num">คงเหลือ</th><th></th></tr></thead><tbody>`;
     for (const b of byNet[grp]) {
@@ -878,6 +880,33 @@ function editWbs(oldWbs) {
     } catch (err) { $('ewErr').textContent = 'บันทึกไม่สำเร็จ: ' + err.message; btn.disabled = false; }
   });
   $('ewVal').focus();
+}
+
+// ---------- แก้หมายเลขโครงข่าย (กรณีอ่านผิด) — เปลี่ยนทุกก้อนงบ/ใบตัดของโครงข่ายนี้ ----------
+function editNetwork(wbs, oldNet) {
+  $('modalBox').innerHTML = `<h3>${ic('edit')}แก้หมายเลขโครงข่าย</h3>
+    <div class="sub">ของเดิม <b>${esc(oldNet)}</b> ในแฟ้ม <b>${esc(wbs)}</b> — แก้แล้วจะเปลี่ยนทุกก้อนงบ/ใบตัดของโครงข่ายนี้</div>
+    <div class="field" style="margin-top:12px"><label>หมายเลขโครงข่ายใหม่</label>
+      <input id="enVal" value="${esc(oldNet)}"></div>
+    <div id="enErr" class="err"></div>
+    <div class="modal-actions">
+      <button class="btn sec" id="enCancel">ยกเลิก</button>
+      <button class="btn" id="enSave">${ic('check')}บันทึก</button>
+    </div>`;
+  $('modal').classList.add('show');
+  $('enCancel').addEventListener('click', closeModal);
+  $('enSave').addEventListener('click', async () => {
+    const newNet = $('enVal').value.trim();
+    if (!newNet) { $('enErr').textContent = 'กรอกหมายเลขโครงข่ายใหม่'; return; }
+    if (newNet === oldNet) { closeModal(); return; }
+    const btn = $('enSave'); btn.disabled = true;
+    try {
+      await callApi('editNetwork', { wbs, oldNet, newNet });
+      closeModal();
+      await loadBudgets();
+    } catch (err) { $('enErr').textContent = 'บันทึกไม่สำเร็จ: ' + err.message; btn.disabled = false; }
+  });
+  $('enVal').focus();
 }
 
 // ---------- ลบแฟ้มงาน (ยืนยัน 2 ชั้น + รหัสผ่าน) ----------
@@ -1148,6 +1177,7 @@ function openSlip(b) {
   const drivers = settings['พขร.'] || [];
   const drvOpts = drivers.map((d) => `<option>${esc(d)}</option>`).join('');
   const requesters = settings['ผู้เบิก'] || [];
+  const plateOpts = (settings['ทะเบียนรถ'] || []).map((d) => `<option>${esc(d)}</option>`).join('');
   const today = new Date().toISOString().slice(0, 10);
   // เพดานทั้งงาน: ตัดรวมทุกหมวดของ WBS นี้ต้องไม่เกินยอดจัดสรรรวม (ถ้าตั้งไว้)
   const wbsCap = b.wbsTotal; // null = ยังไม่ตั้งยอด → ไม่บังคับเพดานรวม
@@ -1174,17 +1204,11 @@ function openSlip(b) {
       <div class="chklist">
         <label class="chk"><input type="checkbox" id="chk-VEH"> ค่ายานพาหนะ / เบี้ยเลี้ยง พชง</label>
         <label class="chk"><input type="checkbox" id="chk-TRV"> ค่าพาหนะ / เบี้ยเลี้ยง พชร(บ)</label>
-        <label class="chk"><input type="checkbox" id="chk-CRN"> ค่าแรง พขร.(บ.) (เครนสว่านเจาะ)</label>
+        <label class="chk"><input type="checkbox" id="chk-CRN"> ค่าแรง พขร.(บ.)</label>
         <div class="chk-detail" id="detail-CRN">
           <select id="f-crnName" class="drv"><option value="">— เลือกชื่อ พขร. —</option>${drvOpts}</select>
           <label class="minl">ตั้งแต่ <input type="date" id="f-crnFrom"></label>
           <label class="minl">ถึง <input type="date" id="f-crnTo"></label>
-        </div>
-        <label class="chk"><input type="checkbox" id="chk-CRT"> ค่าแรง พขร.(บ.) (รถกระเช้า)</label>
-        <div class="chk-detail" id="detail-CRT">
-          <select id="f-crtName" class="drv"><option value="">— เลือกชื่อ พขร. —</option>${drvOpts}</select>
-          <label class="minl">ตั้งแต่ <input type="date" id="f-crtFrom"></label>
-          <label class="minl">ถึง <input type="date" id="f-crtTo"></label>
         </div>
         <div class="chk-detail">
           <button type="button" class="btn sec" id="addDriver">${ic('plus')}เพิ่มชื่อ พขร.</button>
@@ -1206,6 +1230,15 @@ function openSlip(b) {
           <label class="minl">ลว. <input type="date" id="f-conDate"></label>
         </div>
         <label class="chk"><input type="checkbox" id="chk-OIL"> ค่าน้ำมันยานพาหนะ</label>
+        <div class="chk-detail" id="detail-OIL">
+          <label class="minl">ทะเบียนรถ <select id="f-oilPlate" class="drv"><option value="">— เลือก —</option>${plateOpts}</select></label>
+          <button type="button" class="btn sec" id="addPlate">${ic('plus')}เพิ่ม</button>
+          <span id="addPlateRow" style="display:none;gap:8px">
+            <input id="newPlate" placeholder="ทะเบียนรถใหม่">
+            <button type="button" class="btn" id="savePlate">บันทึก</button>
+          </span>
+          <div id="plateErr" class="err" style="flex-basis:100%;margin:0"></div>
+        </div>
         <label class="chk"><input type="checkbox" id="chk-OTH"> อื่นๆ</label>
         <div class="chk-detail" id="detail-OTH"><label class="minl">ระบุ <input id="f-othText" style="min-width:220px"></label></div>
       </div></div>
@@ -1233,7 +1266,7 @@ function openSlip(b) {
     $('slipErr').textContent = err;
   });
   // แสดงช่องรายละเอียด (วันที่/ชื่อ/ทีม) เฉพาะเมื่อ checkbox ของหัวข้อนั้นถูกติ๊ก (ข้อ 2)
-  ['CRN', 'CRT', 'DLY', 'CON', 'OTH'].forEach((k) => {
+  ['CRN', 'DLY', 'CON', 'OIL', 'OTH'].forEach((k) => {
     const cb = $('chk-' + k), det = $('detail-' + k);
     const sync = () => { det.style.display = cb.checked ? 'flex' : 'none'; };
     cb.addEventListener('change', sync); sync();
@@ -1246,6 +1279,10 @@ function openSlip(b) {
     $('addRequesterRow').style.display = 'flex'; $('newRequester').focus();
   });
   $('saveRequester').addEventListener('click', saveRequester);
+  $('addPlate').addEventListener('click', () => {
+    $('addPlateRow').style.display = 'flex'; $('newPlate').focus();
+  });
+  $('savePlate').addEventListener('click', savePlate);
   $('cancelSlip').addEventListener('click', closeModal);
   $('submitSlip').addEventListener('click', () => submitSlip(b));
 }
@@ -1259,9 +1296,7 @@ async function saveDriver() {
     const list = await callApi('addDriver', { name });
     settings['พขร.'] = list;
     const opts = `<option value="">— เลือกชื่อ พขร. —</option>${list.map((d) => `<option>${esc(d)}</option>`).join('')}`;
-    ['f-crnName', 'f-crtName'].forEach((id) => {
-      const sel = $(id); const cur = sel.value; sel.innerHTML = opts; sel.value = cur;
-    });
+    const sel = $('f-crnName'); const cur = sel.value; sel.innerHTML = opts; sel.value = cur;
     $('addDriverRow').style.display = 'none'; $('newDriver').value = '';
   } catch (err) {
     $('driverErr').textContent = err.message;
@@ -1282,6 +1317,23 @@ async function saveRequester() {
     $('addRequesterRow').style.display = 'none'; $('newRequester').value = '';
   } catch (err) {
     $('requesterErr').textContent = err.message;
+  } finally { btn.disabled = false; }
+}
+
+// เพิ่มทะเบียนรถใหม่จากในฟอร์ม → เก็บลงชีต + เติม dropdown + เลือกให้เลย
+async function savePlate() {
+  const name = $('newPlate').value.trim();
+  if (!name) { $('plateErr').textContent = 'ใส่ทะเบียนรถก่อน'; return; }
+  const btn = $('savePlate'); btn.disabled = true; $('plateErr').textContent = '';
+  try {
+    const list = await callApi('addPlate', { name });
+    settings['ทะเบียนรถ'] = list;
+    const sel = $('f-oilPlate');
+    sel.innerHTML = `<option value="">— เลือก —</option>${list.map((d) => `<option>${esc(d)}</option>`).join('')}`;
+    sel.value = name;
+    $('addPlateRow').style.display = 'none'; $('newPlate').value = '';
+  } catch (err) {
+    $('plateErr').textContent = err.message;
   } finally { btn.disabled = false; }
 }
 
@@ -1342,15 +1394,14 @@ async function submitSlip(b) {
   const clientId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
   // checkbox หน้างาน + รายละเอียด (เก็บเฉพาะรายละเอียดของช่องที่ติ๊ก → PDF เว้นว่างถ้าไม่ติ๊ก)
   const chk = {};
-  ['VEH', 'TRV', 'CRN', 'CRT', 'DLY', 'CON', 'OIL', 'OTH'].forEach((k) => { chk[k] = $('chk-' + k).checked; });
+  ['VEH', 'TRV', 'CRN', 'DLY', 'CON', 'OIL', 'OTH'].forEach((k) => { chk[k] = $('chk-' + k).checked; });
   const extra = {
     chk,
     crnName: chk.CRN ? val('f-crnName') : '',
     crnFrom: chk.CRN ? val('f-crnFrom') : '', crnTo: chk.CRN ? val('f-crnTo') : '', // ช่วงวันที่ พขร.เครน (ข้อ 2)
-    crtName: chk.CRT ? val('f-crtName') : '',
-    crtFrom: chk.CRT ? val('f-crtFrom') : '', crtTo: chk.CRT ? val('f-crtTo') : '', // ช่วงวันที่ พขร.กระเช้า
     dlyFrom: chk.DLY ? val('f-dlyFrom') : '', dlyTo: chk.DLY ? val('f-dlyTo') : '', // ช่วงวันที่ แรงรายวัน
     dlyTeam: chk.DLY ? val('f-dlyTeam') : '',
+    oilPlate: chk.OIL ? val('f-oilPlate') : '', // ทะเบียนรถ ค่าน้ำมันยานพาหนะ
     othText: chk.OTH ? val('f-othText') : '', // อื่นๆ ระบุ → แทนจุดไข่ปลาใน PDF
     apv: val('f-apv'), apd: val('f-apd'), // อนุมัติที่ / อนุมัติ ลว. (กรอกในแอป → PDF)
   };
