@@ -362,7 +362,7 @@ function renderServerSetup() {
   $('filesOut').innerHTML = `<div class="card" style="max-width:640px;margin:24px auto">
     <h3 style="margin:0 0 6px">เชื่อมต่อฐานข้อมูลของสำนักงาน</h3>
     <div class="sub">วาง URL ของ Google Apps Script web app (ลงท้าย <span class="mono">/exec</span>)
-      ที่ได้จากตอน Deploy — ดูขั้นตอนใน README_DEPLOY.md</div>
+      ที่ได้จากตอน Deploy — ดูขั้นตอนใน README.md</div>
     <div class="field" style="margin:14px 0 0">
       <input id="gasUrlIn" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(getGasUrl())}">
     </div>

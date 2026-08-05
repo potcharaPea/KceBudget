@@ -1,7 +1,7 @@
 // Code.gs — เว็บแอป GAS: เก็บ state, คำนวณคงเหลือ, validate, จัดการ re-import
 // ใช้คู่กับ logic.gs (business logic ล้วน)
 //
-// วิธี deploy ฉบับเต็มดู README_DEPLOY.md — ย่อ: แก้ OFFICE/FILE_PREFIX ด้านล่าง →
+// วิธี deploy ฉบับเต็มดู README.md — ย่อ: แก้ OFFICE/FILE_PREFIX ด้านล่าง →
 // รัน setup() → Deploy เป็น Web app → เอา URL /exec ไปกรอกในแอปครั้งแรก
 // แก้โค้ดภายหลังต้อง Deploy > Manage deployments > แก้ deployment เดิม > Version: New
 
