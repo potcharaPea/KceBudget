@@ -17,11 +17,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // GAS ตอบผ่าน 302 redirect ซึ่งบางครั้งคืนหน้า HTML แทน JSON (flakiness ฝั่ง Google)
 // → retry เมื่อเจอ HTML/เน็ตสะดุด; error ปกติจาก server (เช่น เบิกเกิน) ไม่ retry
 // write ทุกตัว idempotent ฝั่ง server (createSlip ใช้ clientId, import เทียบ key) → retry ปลอดภัย
+// วัดจริงจาก production (2026-08-05, 30 คำขอ): เพี้ยนราว 20% ต่อคำขอ และหนักเป็นพิเศษตอน cold start
+// → 3 รอบเหลือหลุด ~0.8% ของคำขอ, 5 รอบเหลือ ~0.03% — retry ไม่มีต้นทุนตอนปกติ จึงเผื่อไว้
+const MAX_TRIES = 5;
 export async function callApi(action, data) {
   const url = getGasUrl();
   if (!url) throw new Error('ยังไม่ได้ตั้งค่าที่อยู่เซิร์ฟเวอร์ (GAS URL)');
   let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     try {
       const res = await fetch(url, {
         method: 'POST',
