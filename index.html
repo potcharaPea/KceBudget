@@ -152,8 +152,24 @@
   .rc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .rc-chip { font-size: 12px; padding: 5px 11px; border-radius: 20px; cursor: pointer; border: 1px solid var(--line-strong); color: var(--muted); background: var(--card); user-select: none; }
   .rc-chip.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  /* หน้าค้นหางบที่เหลือ: รวบเป็นกลุ่มต่อ WBS พับ/กางด้วย <details> */
+  .rg { border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 8px; overflow: hidden; }
+  .rg[open] { border-color: var(--primary); }
+  .rg > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 13px 16px; cursor: pointer; list-style: none; user-select: none; }
+  .rg > summary::-webkit-details-marker { display: none; }
+  .rg > summary::before { content: '▸'; color: var(--muted); font-size: 12px; transition: transform .15s; }
+  .rg[open] > summary::before { transform: rotate(90deg); }
+  .rg > summary:hover { background: var(--surface-soft); }
+  .rg-code { font-weight: 600; color: var(--primary); }
+  .rg-wbs { font-size: 13px; }
+  .rg-tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--surface-soft); color: var(--muted); }
+  .rg-n { font-size: 12px; color: var(--muted); }
+  .rg-bal { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rg > table { width: 100%; border-collapse: collapse; border-top: 1px solid var(--line); }
+  .rg tbody tr { cursor: pointer; }
+  .rg tbody tr:hover { background: var(--primary-soft); }
+  @media (max-width: 640px) { .rg-wbs { flex-basis: 100%; } .rg-bal { margin-left: 0; } }
   #remainOut tbody tr { cursor: pointer; }
-  #remainOut thead th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
   .fc-bar { height: 5px; background: var(--line); border-radius: 20px; overflow: hidden; margin-bottom: 9px; }
   .fc-bar > i { display: block; height: 100%; background: var(--primary); border-radius: 20px; }
   .fc-stats { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }

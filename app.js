@@ -43,7 +43,7 @@ let search = '';        // คำค้นในหน้าเลือกแ�
 let dashMode = 'sum';   // โหมด Dashboard: sum | month | year
 let remainCats = null;  // ข้อ 6: Set หมวดงบที่เลือก (null = ทั้งหมด)
 let remainOper = 'all'; // ข้อ 6: ตัวกรองผู้ดำเนินการ all | pea | co
-let remainSort = { col: 'fileCode', dir: 1 }; // ข้อ 6: คอลัมน์+ทิศทาง sort
+let remainSort = 'balance'; // ข้อ 6: เรียงกลุ่มงานตาม balance | fileCode | wbs
 let flashCutKey = null; // key ก้อนงบที่เพิ่งตัด → ไฮไลต์แถวชั่วคราวหลัง re-render
 
 // ---------- สลับ panel ใน main + เมนู sidebar ----------
@@ -536,43 +536,62 @@ function renderRemaining() {
              allocation: b.allocation, paid: b.paid, balance: b.balance, oper: j.oper, wbs: b.wbs };
   });
 
-  const { col, dir } = remainSort;
-  rows.sort((a, x) => {
-    const va = a[col], vx = x[col];
-    return (typeof va === 'number' ? va - vx : String(va).localeCompare(String(vx))) * dir;
+  // รวบเป็นกลุ่มต่อ WBS — หน้านี้เคยเป็นตารางยาวแถวเดียวรวด อ่านยากเมื่องบเยอะ
+  const groups = [];
+  const byWbs = {};
+  rows.forEach((r, i) => {
+    let g = byWbs[r.wbs];
+    if (!g) { g = byWbs[r.wbs] = { wbs: r.wbs, fileCode: r.fileCode, node: r.node, oper: r.oper, balance: 0, items: [] }; groups.push(g); }
+    g.balance = Math.round((g.balance + r.balance) * 100) / 100; // ปัดสตางค์แบบเดียวกับ jobRemain
+    g.items.push({ ...r, i });
   });
+
+  const SORTS = [['balance', 'คงเหลือมากสุด'], ['fileCode', 'รหัสแฟ้ม'], ['wbs', 'WBS']];
+  groups.sort((a, x) => remainSort === 'balance'
+    ? x.balance - a.balance
+    : String(a[remainSort]).localeCompare(String(x[remainSort])));
 
   const catChips = allCats.map((c) =>
     `<label class="rc-chip ${remainCats.has(c) ? 'on' : ''}"><input type="checkbox" data-cat="${esc(c)}" ${remainCats.has(c) ? 'checked' : ''} hidden>${esc(c)}</label>`).join('');
   const operSeg = [['all', 'ทั้งหมด'], ['pea', 'กฟภ.'], ['co', 'บริษัท']].map(([v, l]) =>
     `<button data-oper="${v}" class="${remainOper === v ? 'on' : ''}">${l}</button>`).join('');
+  const sortSeg = SORTS.map(([v, l]) =>
+    `<button data-rsort="${v}" class="${remainSort === v ? 'on' : ''}">${l}</button>`).join('');
 
-  const COLS = [['fileCode', 'รหัสแฟ้ม'], ['wbs', 'WBS'], ['node', 'โหนด'], ['dept', 'แผนก'], ['category', 'หมวดงบ'],
-    ['allocation', 'ยอดจัดสรร', 1], ['paid', 'จ่ายแล้ว', 1], ['balance', 'คงเหลือ', 1], ['oper', 'ผู้ดำเนินการ']];
-  const head = COLS.map(([c, l, num]) =>
-    `<th data-sort="${c}" class="rc-th${num ? ' num' : ''}">${l}${col === c ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('');
-  const body = rows.map((r, i) =>
-    `<tr data-i="${i}"><td class="mono">${esc(r.fileCode)}</td><td class="mono">${esc(r.wbs)}</td>
-      <td>${esc(r.node || '—')}</td><td>${esc(r.dept)}</td><td>${esc(r.category)}</td>
-      <td class="num">${fmt(r.allocation)}</td><td class="num">${fmt(r.paid)}</td>
-      <td class="num">${fmt(r.balance)}</td><td>${esc(r.oper || '—')}</td></tr>`).join('');
+  // <details> = พับ/กางเองได้โดยไม่ต้องเขียน JS และกดด้วยคีย์บอร์ดได้
+  const groupHtml = groups.map((g) => `<details class="rg">
+    <summary>
+      <span class="rg-code mono">${esc(g.fileCode)}</span>
+      <span class="rg-wbs mono">${esc(g.wbs)}</span>
+      ${g.node ? `<span class="rg-tag">โหนด ${esc(g.node)}</span>` : ''}
+      ${g.oper ? `<span class="rg-tag">${esc(g.oper)}</span>` : ''}
+      <span class="rg-n">${g.items.length} หมวด</span>
+      <span class="rg-bal">${fmt(g.balance)}</span>
+    </summary>
+    <table><thead><tr><th>หมวดงบ</th><th>แผนก</th><th class="num">ยอดจัดสรร</th>
+      <th class="num">จ่ายแล้ว</th><th class="num">คงเหลือ</th></tr></thead><tbody>
+      ${g.items.map((r) => `<tr data-i="${r.i}"><td>${esc(r.category)}</td><td>${esc(r.dept)}</td>
+        <td class="num">${fmt(r.allocation)}</td><td class="num">${fmt(r.paid)}</td>
+        <td class="num">${fmt(r.balance)}</td></tr>`).join('')}
+    </tbody></table></details>`).join('');
 
   $('remainOut').innerHTML = `
     <div class="rc-filters">
       <div class="rc-group"><span class="rc-lbl">หมวดงบ</span><div class="rc-chips">${catChips}</div></div>
       <div class="rc-group"><span class="rc-lbl">ผู้ดำเนินการ</span><div class="seg">${operSeg}</div></div>
+      <div class="rc-group"><span class="rc-lbl">เรียงตาม</span><div class="seg">${sortSeg}</div></div>
     </div>
-    ${rows.length
-      ? `<div class="net"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
-         <div class="sub" style="margin-top:8px">พบ ${rows.length} หมวดที่ยังมีงบเหลือ — กดที่แถวเพื่อเปิดใบตัด</div>`
+    ${groups.length
+      ? `${groupHtml}
+         <div class="sub" style="margin-top:10px">${groups.length} งาน · ${rows.length} หมวดที่ยังมีงบเหลือ — กดหัวข้อเพื่อกาง แล้วกดที่แถวเพื่อเปิดใบตัด</div>`
       : `<div class="list-empty">ไม่พบหมวดงบที่ตรงเงื่อนไข</div>`}`;
 
   $('remainOut').querySelectorAll('[data-cat]').forEach((cb) =>
     cb.addEventListener('change', () => { cb.checked ? remainCats.add(cb.dataset.cat) : remainCats.delete(cb.dataset.cat); renderRemaining(); }));
   $('remainOut').querySelectorAll('[data-oper]').forEach((btn) =>
     btn.addEventListener('click', () => { remainOper = btn.dataset.oper; renderRemaining(); }));
-  $('remainOut').querySelectorAll('[data-sort]').forEach((th) =>
-    th.addEventListener('click', () => { const c = th.dataset.sort; remainSort = { col: c, dir: remainSort.col === c ? -remainSort.dir : 1 }; renderRemaining(); }));
+  $('remainOut').querySelectorAll('[data-rsort]').forEach((btn) =>
+    btn.addEventListener('click', () => { remainSort = btn.dataset.rsort; renderRemaining(); }));
   $('remainOut').querySelectorAll('tbody tr').forEach((tr) =>
     tr.addEventListener('click', () => openSlip(rows[+tr.dataset.i].b)));
 }
