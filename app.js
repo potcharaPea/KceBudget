@@ -36,6 +36,7 @@ const spin = '<span class="spinner"></span>';
 let parsed = null;      // ผลอ่านไฟล์ล่าสุด {wbs, networks, fileName}
 let budgets = [];       // ก้อนงบจาก server
 let settings = {};      // master data dropdown
+let gsVersion = '—';    // เวอร์ชัน Code.gs ที่ deploy อยู่ (โชว์ในหน้าผู้พัฒนา ไว้เช็คว่า redeploy แล้วหรือยัง)
 let selectedBase = null; // แฟ้มที่เลือกดูอยู่ (WBS base)
 let selectedNode = 'ALL'; // โหนดที่เลือกในแฟ้ม: 'ALL' (ทุกโหนด) หรือ WBS เต็มของโหนดนั้น
 let search = '';        // คำค้นในหน้าเลือกแฟ้ม
@@ -92,6 +93,7 @@ $('credit').addEventListener('click', () => {
   $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
     ${dev('นายพชระ ปรีดากรณ์', 'วศก.ผปร. กฟส.คช.')}
     ${dev('นายภัคพล คนซื่อ', 'พชง.ผปร. กฟส.คช.')}
+    <div class="sub" style="text-align:center;margin-top:8px">เวอร์ชันเซิร์ฟเวอร์ (GAS): ${esc(gsVersion)}</div>
     <div class="modal-actions" style="justify-content:center"><button class="btn" id="creditClose">ปิด</button></div>`;
   $('modal').classList.add('show');
   $('creditClose').addEventListener('click', closeModal);
@@ -336,6 +338,7 @@ async function loadBudgets() {
     const r = await fetchAll();
     ({ budgets, settings } = r);
     if (r.office) setOfficeName(r.office); // ชื่อสำนักงานมาจาก Code.gs ของสำนักงานนั้น
+    gsVersion = r.gsVersion || '(เก่ากว่า 2026-08-05)'; // ไว้เทียบว่า redeploy GAS ตามเว็บหรือยัง
     setSync(true, 'เชื่อมต่อฐานข้อมูลแล้ว');
     updatePendingBadge();
     renderActivePanel();

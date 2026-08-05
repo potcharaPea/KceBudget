@@ -11,6 +11,13 @@
 var OFFICE = 'กฟส.คำชะอี';   // ชื่อสำนักงาน — ขึ้นหัวแอป + ตั้งชื่อสเปรดชีตตอน setup()
 var FILE_PREFIX = 'KCE';      // ตัวนำหน้ารหัสแฟ้ม เช่น KCE01, KCE02
 
+// ต้นฉบับ template ใบตัดงบ (Google Doc กลาง แชร์แบบ "ใครมีลิงก์ดูได้")
+// setup() จะก๊อปลงไดรฟ์ของสำนักงานให้เอง → ไม่ต้องอัปโหลด/แปลง/ก๊อป ID เอง
+// เว้นว่างไว้ = ทำเองแบบเดิม (ตั้ง Script Property TEMPLATE_DOC_ID)
+var TEMPLATE_MASTER_ID = '';
+
+var GS_VERSION = '2026-08-05'; // เวอร์ชันโค้ดฝั่ง GAS — โชว์ในแอปไว้เช็คว่า redeploy ตรงกับเว็บหรือยัง
+
 var PROP = PropertiesService.getScriptProperties();
 var SHEET_ID_KEY = 'SHEET_ID';
 var TABS = { budget: 'งบ', ledger: 'บันทึกการตัด', revision: 'ประวัติแก้งบ', settings: 'ตั้งค่า' };
@@ -44,8 +51,71 @@ function setup() {
   var def = ss.getSheetByName('Sheet1');
   if (def && ss.getSheets().length > 1) ss.deleteSheet(def);
 
+  ensureTemplate_(); // ก๊อป template ใบตัดงบลงไดรฟ์ตัวเอง (ถ้ายังไม่มี)
+
   Logger.log('สเปรดชีต: ' + ss.getUrl());
+  selfTest();        // สรุปให้เห็นเลยว่าติดตั้งครบหรือยัง
   return ss.getUrl();
+}
+
+// ก๊อป template จากต้นฉบับกลางลงไดรฟ์ของสำนักงาน แล้วจำ ID ไว้ — ข้ามถ้าตั้งเองไว้แล้ว
+function ensureTemplate_() {
+  if (PROP.getProperty('TEMPLATE_DOC_ID')) return;
+  if (!TEMPLATE_MASTER_ID) {
+    Logger.log('⚠️ ยังไม่มี TEMPLATE_DOC_ID และไม่ได้ตั้ง TEMPLATE_MASTER_ID → ต้องตั้ง Script Property เอง (ดู README ขั้นที่ 4)');
+    return;
+  }
+  try {
+    var copy = DriveApp.getFileById(TEMPLATE_MASTER_ID).makeCopy('ใบตัดงบ template — ' + OFFICE);
+    PROP.setProperty('TEMPLATE_DOC_ID', copy.getId());
+    Logger.log('✅ ก๊อป template แล้ว: ' + copy.getUrl());
+  } catch (e) {
+    Logger.log('⚠️ ก๊อป template ไม่สำเร็จ (' + e.message + ') → ตั้ง TEMPLATE_DOC_ID เองตาม README ขั้นที่ 4');
+  }
+}
+
+// ตรวจว่าติดตั้งครบหรือยัง — รันจาก editor แล้วอ่าน Execution log
+// มีไว้ให้สำนักงานที่ติดตั้งเองเช็คได้โดยไม่ต้องถามผู้พัฒนา
+function selfTest() {
+  var out = [], ok = true;
+  function chk(pass, label, detail) {
+    out.push((pass ? '✅ ' : '❌ ') + label + (detail ? ' — ' + detail : ''));
+    if (!pass) ok = false;
+  }
+
+  out.push('=== ตรวจการติดตั้ง ' + OFFICE + ' (GAS ' + GS_VERSION + ') ===');
+  chk(!!OFFICE, 'ตั้งชื่อสำนักงาน', OFFICE);
+  chk(!!FILE_PREFIX, 'ตั้ง prefix รหัสแฟ้ม', FILE_PREFIX);
+
+  var id = PROP.getProperty(SHEET_ID_KEY);
+  chk(!!id, 'มี SHEET_ID', id || 'ยังไม่ได้รัน setup()');
+
+  if (id) {
+    try {
+      var ss = SpreadsheetApp.openById(id);
+      chk(true, 'เปิดสเปรดชีตได้', ss.getUrl());
+      var missing = [];
+      Object.keys(TABS).forEach(function (k) { if (!ss.getSheetByName(TABS[k])) missing.push(TABS[k]); });
+      chk(!missing.length, 'มีครบ 4 แท็บ', missing.length ? 'ขาด: ' + missing.join(', ') : '');
+      if (!missing.length) {
+        chk(true, 'ข้อมูลในชีต',
+          'งบ ' + Math.max(0, ss.getSheetByName(TABS.budget).getLastRow() - 1) + ' ก้อน · ' +
+          'ใบตัด ' + Math.max(0, ss.getSheetByName(TABS.ledger).getLastRow() - 1) + ' ใบ');
+      }
+    } catch (e) { chk(false, 'เปิดสเปรดชีตได้', e.message); }
+  }
+
+  var tid = PROP.getProperty('TEMPLATE_DOC_ID');
+  chk(!!tid, 'มี TEMPLATE_DOC_ID', tid || 'ออก PDF ไม่ได้ — ดู README ขั้นที่ 4');
+  if (tid) {
+    // เช็คว่าเป็น Google Doc เนทีฟจริง — .docx ที่อัปแล้วไม่แปลง จะพังตรงนี้ (ด่านที่พลาดกันบ่อยสุด)
+    try { DocumentApp.openById(tid); chk(true, 'template เป็น Google Doc เปิดได้'); }
+    catch (e) { chk(false, 'template เป็น Google Doc เปิดได้', 'ยังเป็น .docx อยู่? ต้องแปลงเป็น Google เอกสารก่อน'); }
+  }
+
+  out.push(ok ? '🎉 ติดตั้งครบ พร้อม Deploy เป็น Web app ได้เลย' : '⚠️ ยังไม่ครบ — แก้ข้อที่ ❌ แล้วรัน selfTest อีกรอบ');
+  Logger.log(out.join('\n'));
+  return out.join('\n');
 }
 
 // แยก WBS แบบ C เป็น base/node/budgetOf/ownership (ข้อ 1/4) — แบบ I หรือไม่มี node → base = WBS เต็ม
@@ -102,7 +172,7 @@ function doPost(e) {
       case 'getBudgets': result = apiGetBudgets_(); break;
       case 'getSettings': result = apiGetSettings_(); break;
       // งบ + master data ในคำขอเดียว — GAS รันทีละคำขอต่อผู้ใช้อยู่แล้ว ยิง 2 รอบจึงช้าเป็น 2 เท่า
-      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_(), office: OFFICE }; break;
+      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_(), office: OFFICE, gsVersion: GS_VERSION }; break;
       case 'importBudget': result = apiImportBudget_(data); break;
       case 'createSlip': result = apiCreateSlip_(data); break;
       case 'getSlips': result = apiGetSlips_(data.key); break;
