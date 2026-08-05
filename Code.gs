@@ -98,6 +98,8 @@ function doPost(e) {
     switch (req.action) {
       case 'getBudgets': result = apiGetBudgets_(); break;
       case 'getSettings': result = apiGetSettings_(); break;
+      // งบ + master data ในคำขอเดียว — GAS รันทีละคำขอต่อผู้ใช้อยู่แล้ว ยิง 2 รอบจึงช้าเป็น 2 เท่า
+      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_() }; break;
       case 'importBudget': result = apiImportBudget_(data); break;
       case 'createSlip': result = apiCreateSlip_(data); break;
       case 'getSlips': result = apiGetSlips_(data.key); break;
@@ -127,7 +129,10 @@ function json_(obj) {
 }
 
 // ---------- helpers อ่านชีต ----------
-function ss_() { return SpreadsheetApp.openById(PROP.getProperty(SHEET_ID_KEY)); }
+// จำ handle ไว้ทั้ง execution — openById เป็น call ที่แพง และบาง API เรียก rows_/ss_ 3-4 รอบต่อ request
+// (ตัวแปร global รีเซ็ตทุก execution อยู่แล้ว จึงไม่ค้างข้ามคำขอ)
+var SS_CACHE_ = null;
+function ss_() { return SS_CACHE_ || (SS_CACHE_ = SpreadsheetApp.openById(PROP.getProperty(SHEET_ID_KEY))); }
 
 function rows_(tab) {
   var sh = ss_().getSheetByName(tab);
@@ -136,17 +141,26 @@ function rows_(tab) {
   return { sh: sh, values: values };
 }
 
-function ledgerLite_() {
-  return rows_(TABS.ledger).values.map(function (r) { return { key: r[1], payNow: r[3] }; });
+// รับ values ที่อ่านมาแล้วได้ — กันอ่านชีตบันทึกการตัดซ้ำหลายรอบใน request เดียว
+function ledgerLite_(values) {
+  return (values || rows_(TABS.ledger).values).map(function (r) { return { key: r[1], payNow: r[3] }; });
+}
+
+// รวมยอดจ่ายต่อคีย์ในรอบเดียว — เร็วกว่าเรียก sumPaid ต่อแถว (O(งบ × ใบตัด))
+function paidMap_(led) {
+  var m = {};
+  led.forEach(function (r) { m[r.key] = (m[r.key] || 0) + Number(r.payNow || 0); });
+  Object.keys(m).forEach(function (k) { m[k] = round2(m[k]); });
+  return m;
 }
 
 // ---------- API ----------
 // รายการก้อนงบ + คงเหลือที่คำนวณสด (server)
-function apiGetBudgets_() {
-  var led = ledgerLite_();
+function apiGetBudgets_(ledValues) {
+  var paid_ = paidMap_(ledgerLite_(ledValues));
   return rows_(TABS.budget).values.map(function (r) {
     var allocation = Number(r[6]);
-    var paid = sumPaid(led, r[0]);
+    var paid = paid_[r[0]] || 0;
     var w = parseWbs_(r[1]); // base/node/budgetOf/ownership (derive จาก WBS — ไม่เก็บคอลัมน์)
     return {
       // เลขกิจกรรมดึงจากคีย์ (ปลอดภัยจาก Sheet ตัด leading zero — คีย์เก็บ "0020" ครบ)
@@ -179,8 +193,11 @@ function apiAddSetting_(type, name) {
   name = String(name || '').trim();
   if (!name) throw new Error('ยังไม่ได้ใส่ชื่อ');
   var existing = apiGetSettings_()[type] || [];
-  if (existing.indexOf(name) < 0) ss_().getSheetByName(TABS.settings).appendRow([type, name]);
-  return apiGetSettings_()[type] || [];
+  if (existing.indexOf(name) < 0) {
+    ss_().getSheetByName(TABS.settings).appendRow([type, name]);
+    existing = existing.concat([name]); // ต่อท้ายในหน่วยความจำ — ไม่ต้องอ่านชีตซ้ำเพื่อคืนรายการใหม่
+  }
+  return existing;
 }
 
 // นำเข้างบ + จัดการ re-import (4.5)
@@ -191,9 +208,7 @@ function apiImportBudget_(data) {
   try {
     var bTab = rows_(TABS.budget);
     var existing = bTab.values.map(function (r) { return { key: r[0], allocation: r[6] }; });
-    var led = ledgerLite_();
-    var paidByKey = {};
-    existing.forEach(function (b) { paidByKey[b.key] = sumPaid(led, b.key); });
+    var paidByKey = paidMap_(ledgerLite_());
 
     var cls = classifyReimport(existing, data.budgets || [], paidByKey);
     var confirm = {};
@@ -249,9 +264,9 @@ function apiImportBudget_(data) {
 }
 
 // เลขใบตัดถัดไป = max ที่มีอยู่ + 1 (กันเลขซ้ำเมื่อมีการลบแถว)
-function nextSlipNo_(sh) {
-  var v = sh.getDataRange().getValues(), max = 0;
-  for (var i = 1; i < v.length; i++) { var n = Number(v[i][0]); if (n > max) max = n; }
+function nextSlipNo_(values) { // values = แถวบันทึกการตัด (ตัด header แล้ว)
+  var max = 0;
+  for (var i = 0; i < values.length; i++) { var n = Number(values[i][0]); if (n > max) max = n; }
   return max + 1;
 }
 
@@ -453,9 +468,10 @@ function apiCreateSlip_(data) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    var ledTab = rows_(TABS.ledger); // อ่านครั้งเดียว ใช้ทั้งเช็ค clientId / คิดยอดจ่าย / หาเลขใบถัดไป
+    var lv = ledTab.values;
     // idempotent: ถ้า clientId นี้เคยบันทึกแล้ว (retry หลัง response หายเป็น HTML) → คืนใบเดิม ไม่เขียนซ้ำ
     if (data.clientId) {
-      var lv = rows_(TABS.ledger).values;
       for (var d = 0; d < lv.length; d++) {
         if (String(lv[d][13]) === String(data.clientId)) {
           return { slipNo: lv[d][0], paid: null, balance: Number(lv[d][4]), duplicate: true };
@@ -463,7 +479,7 @@ function apiCreateSlip_(data) {
       }
     }
 
-    var budgets = apiGetBudgets_();
+    var budgets = apiGetBudgets_(lv);
     var bud = null;
     for (var i = 0; i < budgets.length; i++) if (budgets[i].key === data.key) { bud = budgets[i]; break; }
     if (!bud) throw new Error('ไม่พบก้อนงบ: ' + data.key);
@@ -480,8 +496,8 @@ function apiCreateSlip_(data) {
     if (!cap.ok) throw new Error(cap.reason);
 
     var newBalance = round2(bud.balance - payNow);
-    var ledSh = ss_().getSheetByName(TABS.ledger);
-    var slipNo = nextSlipNo_(ledSh); // max+1 (กัน slipNo ซ้ำหลังลบแฟ้ม — ไม่พึ่งจำนวนแถว)
+    var ledSh = ledTab.sh;
+    var slipNo = nextSlipNo_(lv); // max+1 (กัน slipNo ซ้ำหลังลบแฟ้ม — ไม่พึ่งจำนวนแถว)
 
     ledSh.appendRow([
       slipNo, data.key, data.slipDate || new Date(), payNow, newBalance,
@@ -530,7 +546,7 @@ function apiMakePdf_(slipNo) {
   if (!row) throw new Error('ไม่พบใบตัดเลขที่ ' + slipNo);
 
   var key = row[1];
-  var bud = null, budgets = apiGetBudgets_();
+  var bud = null, budgets = apiGetBudgets_(led.values); // ใช้ ledger ที่อ่านไว้แล้ว ไม่อ่านซ้ำ
   for (var j = 0; j < budgets.length; j++) if (budgets[j].key === key) { bud = budgets[j]; break; }
   if (!bud) throw new Error('ไม่พบก้อนงบของใบตัดนี้: ' + key);
 

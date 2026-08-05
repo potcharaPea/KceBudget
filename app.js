@@ -324,7 +324,7 @@ async function loadBudgets() {
   }
   setSync(true, 'กำลังโหลด…');
   try {
-    [budgets, settings] = await Promise.all([callApi('getBudgets'), callApi('getSettings')]);
+    ({ budgets, settings } = await callApi('getAll'));
     setSync(true, 'เชื่อมต่อฐานข้อมูลแล้ว');
     updatePendingBadge();
     renderActivePanel();
