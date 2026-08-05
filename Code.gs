@@ -11,9 +11,10 @@
 var OFFICE = 'กฟส.คำชะอี';   // ชื่อสำนักงาน — ขึ้นหัวแอป + ตั้งชื่อสเปรดชีตตอน setup()
 var FILE_PREFIX = 'KCE';      // ตัวนำหน้ารหัสแฟ้ม เช่น KCE01, KCE02
 
-// ต้นฉบับ template ใบตัดงบ (Google Doc กลาง แชร์แบบ "ใครมีลิงก์ดูได้")
-// setup() จะก๊อปลงไดรฟ์ของสำนักงานให้เอง → ไม่ต้องอัปโหลด/แปลง/ก๊อป ID เอง
-// เว้นว่างไว้ = ทำเองแบบเดิม (ตั้ง Script Property TEMPLATE_DOC_ID)
+// ต้นฉบับ template ใบตัดงบ — Google Doc กลาง ใช้ร่วมกันทุกสำนักงาน (แชร์ "ใครมีลิงก์ดูได้")
+// ตอนออก PDF โค้ดก๊อปเป็นไฟล์ชั่วคราวในไดรฟ์ของสำนักงานเองแล้วลบทิ้ง ต้นฉบับไม่เคยถูกแก้
+// → แก้ฟอร์มที่เดียว ทุกสำนักงานได้ทันที ไม่ต้อง redeploy
+// สำนักงานที่อยากใช้ฟอร์มของตัวเอง: ตั้ง Script Property TEMPLATE_DOC_ID ทับได้
 var TEMPLATE_MASTER_ID = '';
 
 var GS_VERSION = '2026-08-05'; // เวอร์ชันโค้ดฝั่ง GAS — โชว์ในแอปไว้เช็คว่า redeploy ตรงกับเว็บหรือยัง
@@ -51,28 +52,13 @@ function setup() {
   var def = ss.getSheetByName('Sheet1');
   if (def && ss.getSheets().length > 1) ss.deleteSheet(def);
 
-  ensureTemplate_(); // ก๊อป template ใบตัดงบลงไดรฟ์ตัวเอง (ถ้ายังไม่มี)
-
   Logger.log('สเปรดชีต: ' + ss.getUrl());
   selfTest();        // สรุปให้เห็นเลยว่าติดตั้งครบหรือยัง
   return ss.getUrl();
 }
 
-// ก๊อป template จากต้นฉบับกลางลงไดรฟ์ของสำนักงาน แล้วจำ ID ไว้ — ข้ามถ้าตั้งเองไว้แล้ว
-function ensureTemplate_() {
-  if (PROP.getProperty('TEMPLATE_DOC_ID')) return;
-  if (!TEMPLATE_MASTER_ID) {
-    Logger.log('⚠️ ยังไม่มี TEMPLATE_DOC_ID และไม่ได้ตั้ง TEMPLATE_MASTER_ID → ต้องตั้ง Script Property เอง (ดู README ขั้นที่ 4)');
-    return;
-  }
-  try {
-    var copy = DriveApp.getFileById(TEMPLATE_MASTER_ID).makeCopy('ใบตัดงบ template — ' + OFFICE);
-    PROP.setProperty('TEMPLATE_DOC_ID', copy.getId());
-    Logger.log('✅ ก๊อป template แล้ว: ' + copy.getUrl());
-  } catch (e) {
-    Logger.log('⚠️ ก๊อป template ไม่สำเร็จ (' + e.message + ') → ตั้ง TEMPLATE_DOC_ID เองตาม README ขั้นที่ 4');
-  }
-}
+// template ที่จะใช้: ของสำนักงานเองถ้าตั้งไว้ ไม่งั้นใช้ต้นฉบับกลาง
+function templateId_() { return PROP.getProperty('TEMPLATE_DOC_ID') || TEMPLATE_MASTER_ID; }
 
 // ตรวจว่าติดตั้งครบหรือยัง — รันจาก editor แล้วอ่าน Execution log
 // มีไว้ให้สำนักงานที่ติดตั้งเองเช็คได้โดยไม่ต้องถามผู้พัฒนา
@@ -105,12 +91,12 @@ function selfTest() {
     } catch (e) { chk(false, 'เปิดสเปรดชีตได้', e.message); }
   }
 
-  var tid = PROP.getProperty('TEMPLATE_DOC_ID');
-  chk(!!tid, 'มี TEMPLATE_DOC_ID', tid || 'ออก PDF ไม่ได้ — ดู README ขั้นที่ 4');
+  var tid = templateId_(), own = !!PROP.getProperty('TEMPLATE_DOC_ID');
+  chk(!!tid, 'มี template ใบตัดงบ', tid ? (own ? 'ของสำนักงานเอง ' + tid : 'ต้นฉบับกลาง') : 'ออก PDF ไม่ได้ — ดู README');
   if (tid) {
-    // เช็คว่าเป็น Google Doc เนทีฟจริง — .docx ที่อัปแล้วไม่แปลง จะพังตรงนี้ (ด่านที่พลาดกันบ่อยสุด)
-    try { DocumentApp.openById(tid); chk(true, 'template เป็น Google Doc เปิดได้'); }
-    catch (e) { chk(false, 'template เป็น Google Doc เปิดได้', 'ยังเป็น .docx อยู่? ต้องแปลงเป็น Google เอกสารก่อน'); }
+    // เช็คว่าเปิดเป็น Google Doc ได้จริง — ถ้าเป็น .docx ที่ยังไม่แปลง หรือแชร์ไม่ถึง จะพังตรงนี้
+    try { DocumentApp.openById(tid); chk(true, 'เปิด template ได้'); }
+    catch (e) { chk(false, 'เปิด template ได้', own ? 'ยังเป็น .docx อยู่? ต้องแปลงเป็น Google เอกสารก่อน' : 'ต้นฉบับกลางเข้าไม่ถึง — แจ้งผู้พัฒนา'); }
   }
 
   out.push(ok ? '🎉 ติดตั้งครบ พร้อม Deploy เป็น Web app ได้เลย' : '⚠️ ยังไม่ครบ — แก้ข้อที่ ❌ แล้วรัน selfTest อีกรอบ');
@@ -669,8 +655,8 @@ function apiMakePdf_(slipNo) {
     DLY_FROM: thaiDateShort_(extra.dlyFrom), DLY_TO: thaiDateShort_(extra.dlyTo),
   };
 
-  var tmplId = PROP.getProperty('TEMPLATE_DOC_ID');
-  if (!tmplId) throw new Error('ยังไม่ได้ตั้งค่า TEMPLATE_DOC_ID (Script Property) — อัปโหลด template เป็น Google Doc แล้วใส่ ID');
+  var tmplId = templateId_();
+  if (!tmplId) throw new Error('ยังไม่ได้ตั้งค่า template ใบตัดงบ — ดู README ขั้นที่ 3');
 
   var copy = DriveApp.getFileById(tmplId).makeCopy('ใบตัดงบ ' + slipNo);
   var doc = DocumentApp.openById(copy.getId());
