@@ -60,6 +60,37 @@ function setup() {
 // template ที่จะใช้: ของสำนักงานเองถ้าตั้งไว้ ไม่งั้นใช้ต้นฉบับกลาง
 function templateId_() { return PROP.getProperty('TEMPLATE_DOC_ID') || TEMPLATE_MASTER_ID; }
 
+// prefix รหัสแฟ้มที่ใช้จริง: ที่ตั้งจากในแอป (Script Property) ทับค่าในโค้ด
+function filePrefix_() { return PROP.getProperty('FILE_PREFIX') || FILE_PREFIX; }
+
+// เปลี่ยน prefix รหัสแฟ้ม + เขียนรหัสเก่าใหม่ทั้งหมดโดยคงเลขรันเดิม (KCE01 → KTW01)
+// ปลอดภัย: รหัสแฟ้มเป็นแค่ตัวแสดงผล/token {FCODE} ไม่ได้ใช้เป็นคีย์ (คีย์งบ = wbs|network|act)
+// data = { prefix }
+function apiSetFilePrefix_(data) {
+  var np = String(data.prefix || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,5}$/.test(np)) throw new Error('รหัสนำหน้าต้องเป็น A-Z หรือ 0-9 ยาว 2-5 ตัว');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = ss_().getSheetByName(TABS.budget);
+    var v = sh.getDataRange().getValues();
+    var col = [], changed = 0;
+    for (var i = 1; i < v.length; i++) {
+      var old = String(v[i][11] || '');
+      // ดึงเฉพาะตัวเลขท้าย — ไม่ยึดความยาว prefix เดิม เผื่อ prefix เก่ายาวไม่เท่ากัน
+      var num = old.replace(/\D/g, '');
+      var nc = num ? np + num : old;
+      if (nc !== old) changed++;
+      col.push([nc]);
+    }
+    if (col.length) sh.getRange(2, 12, col.length, 1).setValues(col);
+    PROP.setProperty('FILE_PREFIX', np);
+    return { prefix: np, changed: changed };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ตรวจว่าติดตั้งครบหรือยัง — รันจาก editor แล้วอ่าน Execution log
 // มีไว้ให้สำนักงานที่ติดตั้งเองเช็คได้โดยไม่ต้องถามผู้พัฒนา
 function selfTest() {
@@ -71,7 +102,7 @@ function selfTest() {
 
   out.push('=== ตรวจการติดตั้ง ' + OFFICE + ' (GAS ' + GS_VERSION + ') ===');
   chk(!!OFFICE, 'ตั้งชื่อสำนักงาน', OFFICE);
-  chk(!!FILE_PREFIX, 'ตั้ง prefix รหัสแฟ้ม', FILE_PREFIX);
+  chk(!!filePrefix_(), 'ตั้ง prefix รหัสแฟ้ม', filePrefix_() + (PROP.getProperty('FILE_PREFIX') ? ' (ตั้งจากในแอป)' : ''));
 
   var id = PROP.getProperty(SHEET_ID_KEY);
   chk(!!id, 'มี SHEET_ID', id || 'ยังไม่ได้รัน setup()');
@@ -127,14 +158,14 @@ function ensureFileCodes_(sh) {
     if (code) {
       var base = parseWbs_(v[i][1]).base;
       if (!map[base]) map[base] = code;
-      var n = Number(String(code).substring(FILE_PREFIX.length));
+      var n = Number(String(code).replace(/D/g, '')); // ดึงเฉพาะเลขรัน ไม่ยึดความยาว prefix
       if (n > maxNum) maxNum = n;
     }
   }
   var col = [], dirty = false;
   for (var i = 1; i < v.length; i++) { // รอบสอง: แถวที่ base ยังไม่มีรหัส → กำหนดใหม่, ทั้ง base ใช้รหัสเดียว
     var b = parseWbs_(v[i][1]).base;
-    if (!map[b]) map[b] = FILE_PREFIX + pad2_(++maxNum);
+    if (!map[b]) map[b] = filePrefix_() + pad2_(++maxNum);
     if (v[i][11] !== map[b]) dirty = true;
     col.push([map[b]]);
   }
@@ -164,7 +195,7 @@ function doPost(e) {
       case 'getBudgets': result = apiGetBudgets_(); break;
       case 'getSettings': result = apiGetSettings_(); break;
       // งบ + master data ในคำขอเดียว — GAS รันทีละคำขอต่อผู้ใช้อยู่แล้ว ยิง 2 รอบจึงช้าเป็น 2 เท่า
-      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_(), office: OFFICE, gsVersion: GS_VERSION }; break;
+      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_(), office: OFFICE, filePrefix: filePrefix_(), gsVersion: GS_VERSION }; break;
       case 'importBudget': result = apiImportBudget_(data); break;
       case 'createSlip': result = apiCreateSlip_(data); break;
       case 'getSlips': result = apiGetSlips_(data.key); break;
@@ -179,6 +210,7 @@ function doPost(e) {
       case 'addPlate': result = apiAddSetting_('ทะเบียนรถ', data.name); break;
       case 'setWbsTotal': result = apiSetWbsTotal_(data); break;
       case 'setOper': result = apiSetOper_(data); break;
+      case 'setFilePrefix': result = apiSetFilePrefix_(data); break;
       case 'editWbs': result = apiEditWbs_(data); break;
       case 'editNetwork': result = apiEditNetwork_(data); break;
       default: throw new Error('ไม่รู้จัก action: ' + req.action);
@@ -287,7 +319,7 @@ function apiImportBudget_(data) {
     var wbs = (data.budgets && data.budgets[0]) ? data.budgets[0].wbs : '';
     var base = parseWbs_(wbs).base;
     var fc = ensureFileCodes_(bTab.sh);
-    var fileCode = wbs ? (fc.map[base] || FILE_PREFIX + pad2_(fc.maxNum + 1)) : '';
+    var fileCode = wbs ? (fc.map[base] || filePrefix_() + pad2_(fc.maxNum + 1)) : '';
 
     var oper = data.oper || ''; // ผู้ดำเนินการ: "กฟภ." หรือชื่อบริษัท
 

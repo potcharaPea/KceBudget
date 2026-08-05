@@ -37,6 +37,7 @@ let parsed = null;      // ผลอ่านไฟล์ล่าสุด {wbs
 let budgets = [];       // ก้อนงบจาก server
 let settings = {};      // master data dropdown
 let gsVersion = '—';    // เวอร์ชัน Code.gs ที่ deploy อยู่ (โชว์ในหน้าผู้พัฒนา ไว้เช็คว่า redeploy แล้วหรือยัง)
+let filePrefix = '';    // prefix รหัสแฟ้มที่ server ใช้อยู่ (แก้ได้ในหน้าตั้งค่า)
 let selectedBase = null; // แฟ้มที่เลือกดูอยู่ (WBS base)
 let selectedNode = 'ALL'; // โหนดที่เลือกในแฟ้ม: 'ALL' (ทุกโหนด) หรือ WBS เต็มของโหนดนั้น
 let search = '';        // คำค้นในหน้าเลือกแฟ้ม
@@ -339,6 +340,7 @@ async function loadBudgets() {
     ({ budgets, settings } = r);
     if (r.office) setOfficeName(r.office); // ชื่อสำนักงานมาจาก Code.gs ของสำนักงานนั้น
     gsVersion = r.gsVersion || '(เก่ากว่า 2026-08-05)'; // ไว้เทียบว่า redeploy GAS ตามเว็บหรือยัง
+    filePrefix = r.filePrefix || '';
     setSync(true, 'เชื่อมต่อฐานข้อมูลแล้ว');
     updatePendingBadge();
     renderActivePanel();
@@ -357,7 +359,7 @@ function setOfficeName(office) {
 
 // หน้าตั้งค่าครั้งแรก — หน้าเว็บตัวเดียวใช้ได้ทุกสำนักงาน แต่ละที่ชี้ไป GAS ของตัวเอง
 function renderServerSetup() {
-  setSync(false, 'ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์');
+  if (!hasBackend()) setSync(false, 'ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์'); // เปิดจาก sidebar ตอนต่อติดอยู่ อย่าไปทับสถานะ
   goPanel('files');
   $('filesOut').innerHTML = `<div class="card" style="max-width:640px;margin:24px auto">
     <h3 style="margin:0 0 6px">เชื่อมต่อฐานข้อมูลของสำนักงาน</h3>
@@ -368,7 +370,33 @@ function renderServerSetup() {
     </div>
     <div id="gasUrlErr" class="err"></div>
     <div style="margin-top:12px"><button class="btn" id="gasUrlSave">${ic('check')}บันทึกแล้วเชื่อมต่อ</button></div>
-  </div>`;
+  </div>
+  ${filePrefix ? `<div class="card" style="max-width:640px;margin:16px auto">
+    <h3 style="margin:0 0 6px">รหัสนำหน้าแฟ้ม</h3>
+    <div class="sub">ตัวนำหน้ารหัสแฟ้มของสำนักงานนี้ — ตอนนี้คือ
+      <b class="mono">${esc(filePrefix)}</b> (เช่น ${esc(filePrefix)}01, ${esc(filePrefix)}02)</div>
+    <div class="warn" style="margin:10px 0">เปลี่ยนแล้วจะ<b>เขียนรหัสแฟ้มเดิมทุกแฟ้มใหม่ทันที</b> โดยคงเลขรันไว้
+      (${esc(filePrefix)}01 → รหัสใหม่ 01) — ใบตัดที่ออก PDF ไปแล้วจะยังเป็นรหัสเก่า</div>
+    <div class="field" style="margin:0">
+      <input id="prefixIn" placeholder="เช่น KTW" value="${esc(filePrefix)}" maxlength="5" style="text-transform:uppercase">
+    </div>
+    <div id="prefixErr" class="err"></div>
+    <div style="margin-top:12px"><button class="btn sec" id="prefixSave">เปลี่ยนรหัสนำหน้า</button></div>
+  </div>` : ''}`;
+  const pb = $('prefixSave');
+  if (pb) pb.addEventListener('click', async () => {
+    const p = $('prefixIn').value.trim().toUpperCase();
+    if (p === filePrefix) { $('prefixErr').textContent = 'เหมือนเดิม ไม่มีอะไรเปลี่ยน'; return; }
+    if (!/^[A-Z0-9]{2,5}$/.test(p)) { $('prefixErr').textContent = 'ต้องเป็น A-Z หรือ 0-9 ยาว 2-5 ตัว'; return; }
+    pb.disabled = true; $('prefixErr').textContent = '';
+    try {
+      const r = await callApi('setFilePrefix', { prefix: p });
+      await loadBudgets();
+      goPanel('files');
+      $('filesOut').insertAdjacentHTML('afterbegin',
+        `<div class="ok">${ic('check')}เปลี่ยนรหัสนำหน้าเป็น ${esc(r.prefix)} แล้ว — แก้ ${r.changed} แถว</div>`);
+    } catch (err) { $('prefixErr').textContent = err.message; pb.disabled = false; }
+  });
   $('gasUrlSave').addEventListener('click', () => {
     const u = $('gasUrlIn').value.trim();
     if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(u)) {
