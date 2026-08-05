@@ -1,6 +1,6 @@
 // service worker — cache app shell ให้ติดตั้ง/ใช้ออฟไลน์ได้ (PWA)
 // เปลี่ยนเลขเวอร์ชันเมื่อแก้ไฟล์ใน ASSETS เพื่อบังคับ refresh cache
-const CACHE = 'kcebudget-v6';
+const CACHE = 'kcebudget-v7';
 const ASSETS = [
   './', './index.html', './app.js', './config.js', './api.js', './parser.js',
   './manifest.webmanifest', './icon.svg',

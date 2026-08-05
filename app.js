@@ -61,6 +61,7 @@ $('menu').addEventListener('click', (e) => {
 });
 $('navImport').addEventListener('click', () => { setMenuActive(''); showPanel('import'); });
 $('reloadBudgets').addEventListener('click', loadBudgets);
+$('serverCfg').addEventListener('click', () => renderServerSetup()); // เปลี่ยน GAS URL ได้ตลอด ไม่ต้องรอให้พัง
 $('search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); renderFiles(); });
 
 // ---------- ธีมสว่าง/มืด (จำใน localStorage, default ตามระบบ) ----------
