@@ -95,7 +95,13 @@ function selfTest() {
   chk(!!tid, 'มี template ใบตัดงบ', tid ? (own ? 'ของสำนักงานเอง ' + tid : 'ต้นฉบับกลาง') : 'ออก PDF ไม่ได้ — ดู README');
   if (tid) {
     // เช็คว่าเปิดเป็น Google Doc ได้จริง — ถ้าเป็น .docx ที่ยังไม่แปลง หรือแชร์ไม่ถึง จะพังตรงนี้
-    try { DocumentApp.openById(tid); chk(true, 'เปิด template ได้'); }
+    try {
+      var body = DocumentApp.openById(tid).getBody().getText();
+      chk(true, 'เปิด template ได้');
+      // ต้องมี {OFFICE} ไม่งั้นใบตัดจะพิมพ์ชื่อสำนักงานผิด (ติดชื่อของสำนักงานที่ทำ template)
+      chk(body.indexOf('{OFFICE}') >= 0, 'template มี {OFFICE}',
+          body.indexOf('{OFFICE}') >= 0 ? '' : 'หัวฟอร์มจะขึ้นชื่อสำนักงานผิด — แจ้งผู้พัฒนา');
+    }
     catch (e) { chk(false, 'เปิด template ได้', own ? 'ยังเป็น .docx อยู่? ต้องแปลงเป็น Google เอกสารก่อน' : 'ต้นฉบับกลางเข้าไม่ถึง — แจ้งผู้พัฒนา'); }
   }
 
@@ -630,6 +636,7 @@ function apiMakePdf_(slipNo) {
 
   // คีย์ = โค้ดใน template (ปีกกาเดี่ยว {CODE})
   var map = {
+    OFFICE: OFFICE, // ชื่อสำนักงานบนหัวฟอร์ม — ต้องเป็น token เพราะ template ใช้ร่วมทุกสำนักงาน
     REF: row[10] || '', JOB: row[5], WBS: bud.wbs,
     DD: dp.day, MM: dp.month, YY: dp.year,
     USR: row[6], POS: row[7],
