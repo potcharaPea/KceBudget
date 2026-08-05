@@ -1,12 +1,15 @@
 // Code.gs — เว็บแอป GAS: เก็บ state, คำนวณคงเหลือ, validate, จัดการ re-import
 // ใช้คู่กับ logic.gs (business logic ล้วน)
 //
-// วิธี deploy (ครั้งแรก):
-//   1) วาง Code.gs + logic.gs ในโปรเจก Apps Script เดียวกัน
-//   2) รันฟังก์ชัน setup() หนึ่งครั้ง (อนุญาต scope) → สร้างสเปรดชีต 4 แท็บ ดู URL ใน Log
-//   3) Deploy > New deployment > Web app > Execute as: me, Who has access: Anyone
-//   4) เอา URL /exec ไปใส่ config.js ฝั่งหน้าเว็บ
+// วิธี deploy ฉบับเต็มดู README_DEPLOY.md — ย่อ: แก้ OFFICE/FILE_PREFIX ด้านล่าง →
+// รัน setup() → Deploy เป็น Web app → เอา URL /exec ไปกรอกในแอปครั้งแรก
 // แก้โค้ดภายหลังต้อง Deploy > Manage deployments > แก้ deployment เดิม > Version: New
+
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║  ตั้งค่าประจำสำนักงาน — แก้ 2 บรรทัดนี้ตอนติดตั้ง แล้วไม่ต้องแตะอีก  ║
+// ╚═══════════════════════════════════════════════════════════════╝
+var OFFICE = 'กฟส.คำชะอี';   // ชื่อสำนักงาน — ขึ้นหัวแอป + ตั้งชื่อสเปรดชีตตอน setup()
+var FILE_PREFIX = 'KCE';      // ตัวนำหน้ารหัสแฟ้ม เช่น KCE01, KCE02
 
 var PROP = PropertiesService.getScriptProperties();
 var SHEET_ID_KEY = 'SHEET_ID';
@@ -16,7 +19,7 @@ var TABS = { budget: 'งบ', ledger: 'บันทึกการตัด', r
 function setup() {
   var id = PROP.getProperty(SHEET_ID_KEY);
   var ss = id ? SpreadsheetApp.openById(id)
-              : SpreadsheetApp.create('ใบตัดงบ กฟส.คำชะอี — ฐานข้อมูล');
+              : SpreadsheetApp.create('ใบตัดงบ ' + OFFICE + ' — ฐานข้อมูล');
   if (!id) PROP.setProperty(SHEET_ID_KEY, ss.getId());
 
   ensureTab_(ss, TABS.budget, ['คีย์งบ', 'WBS', 'หมายเลขโครงข่าย', 'แผนก', 'ชื่อหมวดงบ', 'เลขกิจกรรม', 'ยอดจัดสรร', 'วันที่ import', 'ไฟล์ต้นทาง', 'ชื่องาน', 'ยอดจัดสรรรวม', 'รหัสแฟ้ม', 'ผู้ดำเนินการ']);
@@ -62,14 +65,14 @@ function ensureFileCodes_(sh) {
     if (code) {
       var base = parseWbs_(v[i][1]).base;
       if (!map[base]) map[base] = code;
-      var n = Number(String(code).replace(/^KCE/, ''));
+      var n = Number(String(code).substring(FILE_PREFIX.length));
       if (n > maxNum) maxNum = n;
     }
   }
   var col = [], dirty = false;
   for (var i = 1; i < v.length; i++) { // รอบสอง: แถวที่ base ยังไม่มีรหัส → กำหนดใหม่, ทั้ง base ใช้รหัสเดียว
     var b = parseWbs_(v[i][1]).base;
-    if (!map[b]) map[b] = 'KCE' + pad2_(++maxNum);
+    if (!map[b]) map[b] = FILE_PREFIX + pad2_(++maxNum);
     if (v[i][11] !== map[b]) dirty = true;
     col.push([map[b]]);
   }
@@ -87,7 +90,7 @@ function ensureTab_(ss, name, header) {
 
 // ---------- router ----------
 function doGet() {
-  return json_({ ok: true, service: 'ใบตัดงบ กฟส.คำชะอี', tabs: Object.keys(TABS).map(function (k) { return TABS[k]; }) });
+  return json_({ ok: true, service: 'ใบตัดงบ ' + OFFICE, tabs: Object.keys(TABS).map(function (k) { return TABS[k]; }) });
 }
 
 function doPost(e) {
@@ -99,7 +102,7 @@ function doPost(e) {
       case 'getBudgets': result = apiGetBudgets_(); break;
       case 'getSettings': result = apiGetSettings_(); break;
       // งบ + master data ในคำขอเดียว — GAS รันทีละคำขอต่อผู้ใช้อยู่แล้ว ยิง 2 รอบจึงช้าเป็น 2 เท่า
-      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_() }; break;
+      case 'getAll': result = { budgets: apiGetBudgets_(), settings: apiGetSettings_(), office: OFFICE }; break;
       case 'importBudget': result = apiImportBudget_(data); break;
       case 'createSlip': result = apiCreateSlip_(data); break;
       case 'getSlips': result = apiGetSlips_(data.key); break;
@@ -222,7 +225,7 @@ function apiImportBudget_(data) {
     var wbs = (data.budgets && data.budgets[0]) ? data.budgets[0].wbs : '';
     var base = parseWbs_(wbs).base;
     var fc = ensureFileCodes_(bTab.sh);
-    var fileCode = wbs ? (fc.map[base] || 'KCE' + pad2_(fc.maxNum + 1)) : '';
+    var fileCode = wbs ? (fc.map[base] || FILE_PREFIX + pad2_(fc.maxNum + 1)) : '';
 
     var oper = data.oper || ''; // ผู้ดำเนินการ: "กฟภ." หรือชื่อบริษัท
 

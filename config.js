@@ -1,3 +1,4 @@
-// config.js — ตั้งค่าที่ผู้ใช้แก้เอง
-// วาง URL ของ GAS web app (ลงท้าย /exec) ที่ได้จากตอน Deploy ที่นี่
-export const GAS_URL = 'https://script.google.com/macros/s/AKfycbyuzM8mgz5dXa44DLTMfgtX62_GH_egwWf-c65SjEX4QbTP8cFyRoZHKoAouKzwKgUAOw/exec';
+// config.js — ค่าเริ่มต้นตอน build
+// ปกติ "ไม่ต้องแก้ไฟล์นี้": เปิดแอปครั้งแรกจะมีหน้าให้กรอก URL แล้วจำไว้ในเครื่อง (localStorage)
+// ใส่ค่าตรงนี้เฉพาะกรณีอยาก build เว็บเป็นของสำนักงานตัวเองแล้วฝัง URL ไปเลย
+export const GAS_URL = '';

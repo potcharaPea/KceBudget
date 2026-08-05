@@ -1,7 +1,7 @@
 // app.js — Phase 2: นำเข้า ZPSR018 → คุมงบ → เปิดใบตัด (ยังไม่ออก PDF)
 import * as pdfjs from './vendor/pdf.min.mjs';
 import { parseZpsr018 } from './parser.js';
-import { callApi, hasBackend } from './api.js';
+import { callApi, hasBackend, getGasUrl, setGasUrl } from './api.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 
@@ -157,7 +157,7 @@ function renderParsed() {
     ? `<div style="text-align:center;margin-top:24px">
          <button class="btn" id="importBtn" style="font-size:1.15rem;padding:14px 44px">${ic('upload')}นำงบเข้าระบบ</button></div>
        <div id="importResult"></div>`
-    : `<div class="warn" style="margin-top:12px">ℹ️ ยังไม่ได้ตั้งค่า GAS_URL ใน config.js — นำเข้าระบบไม่ได้ (แสดงผลบนจอเท่านั้น)</div>`;
+    : `<div class="warn" style="margin-top:12px">ℹ️ ยังไม่ได้เชื่อมต่อเซิร์ฟเวอร์ — นำเข้าระบบไม่ได้ (แสดงผลบนจอเท่านั้น)</div>`;
   $('importOut').innerHTML = html;
   if (hasBackend()) {
     bindOperPicker();
@@ -225,7 +225,7 @@ let batchResults = [];
 
 function handleFiles(files) {
   if (!hasBackend()) {
-    $('importOut').innerHTML = `<div class="warn">ℹ️ ยังไม่ได้ตั้งค่า GAS_URL ใน config.js — นำเข้าระบบไม่ได้</div>`;
+    $('importOut').innerHTML = `<div class="warn">ℹ️ ยังไม่ได้เชื่อมต่อเซิร์ฟเวอร์ — นำเข้าระบบไม่ได้</div>`;
     return;
   }
   $('importOut').innerHTML = `<div class="field" style="margin-bottom:16px"><label>ชื่องาน (ใช้กับทุกไฟล์ในชุดนี้ — เว้นว่างได้)</label>
@@ -329,21 +329,50 @@ async function fetchAll() {
 }
 
 async function loadBudgets() {
-  if (!hasBackend()) {
-    setSync(false, 'ยังไม่ได้ตั้งค่า GAS_URL');
-    $('filesOut').innerHTML = '<div class="list-empty">ยังไม่ได้ตั้งค่า GAS_URL ใน config.js</div>';
-    return;
-  }
+  if (!hasBackend()) { renderServerSetup(); return; }
   setSync(true, 'กำลังโหลด…');
   try {
-    ({ budgets, settings } = await fetchAll());
+    const r = await fetchAll();
+    ({ budgets, settings } = r);
+    if (r.office) setOfficeName(r.office); // ชื่อสำนักงานมาจาก Code.gs ของสำนักงานนั้น
     setSync(true, 'เชื่อมต่อฐานข้อมูลแล้ว');
     updatePendingBadge();
     renderActivePanel();
   } catch (err) {
     setSync(false, 'เชื่อมต่อไม่สำเร็จ');
-    $('filesOut').innerHTML = `<div class="list-empty err">โหลดไม่สำเร็จ: ${esc(err.message)}</div>`;
+    $('filesOut').innerHTML = `<div class="list-empty err">โหลดไม่สำเร็จ: ${esc(err.message)}
+      <div style="margin-top:12px"><button class="btn sec" id="reSetup">ตั้งค่าที่อยู่เซิร์ฟเวอร์</button></div></div>`;
+    $('reSetup').addEventListener('click', renderServerSetup);
   }
+}
+
+function setOfficeName(office) {
+  $('brandOffice').textContent = `${office} · ตัดงบก่อสร้าง`;
+  document.title = `PEA Budget ${office}`;
+}
+
+// หน้าตั้งค่าครั้งแรก — หน้าเว็บตัวเดียวใช้ได้ทุกสำนักงาน แต่ละที่ชี้ไป GAS ของตัวเอง
+function renderServerSetup() {
+  setSync(false, 'ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์');
+  goPanel('files');
+  $('filesOut').innerHTML = `<div class="card" style="max-width:640px;margin:24px auto">
+    <h3 style="margin:0 0 6px">เชื่อมต่อฐานข้อมูลของสำนักงาน</h3>
+    <div class="sub">วาง URL ของ Google Apps Script web app (ลงท้าย <span class="mono">/exec</span>)
+      ที่ได้จากตอน Deploy — ดูขั้นตอนใน README_DEPLOY.md</div>
+    <div class="field" style="margin:14px 0 0">
+      <input id="gasUrlIn" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(getGasUrl())}">
+    </div>
+    <div id="gasUrlErr" class="err"></div>
+    <div style="margin-top:12px"><button class="btn" id="gasUrlSave">${ic('check')}บันทึกแล้วเชื่อมต่อ</button></div>
+  </div>`;
+  $('gasUrlSave').addEventListener('click', () => {
+    const u = $('gasUrlIn').value.trim();
+    if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(u)) {
+      $('gasUrlErr').textContent = 'URL ต้องเป็นของ script.google.com และลงท้ายด้วย /exec'; return;
+    }
+    setGasUrl(u);
+    loadBudgets();
+  });
 }
 
 // เรนเดอร์เฉพาะ panel ที่กำลังเปิดอยู่ (หลังโหลดข้อมูลใหม่)

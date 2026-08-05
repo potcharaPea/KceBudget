@@ -2,8 +2,14 @@
 // POST body เป็น string และไม่ตั้ง Content-Type → เป็น simple request ไม่มี CORS preflight
 import { GAS_URL } from './config.js';
 
+// URL เก็บในเครื่อง (ตั้งครั้งเดียวตอนเปิดแอปครั้งแรก) — หน้าเว็บตัวเดียวใช้ได้ทุกสำนักงาน
+// config.js เป็นแค่ค่าเริ่มต้นเผื่อ build ฝัง URL มาให้แล้ว
+const LS_KEY = 'peabudget_gas_url';
+export const getGasUrl = () => localStorage.getItem(LS_KEY) || GAS_URL;
+export const setGasUrl = (u) => localStorage.setItem(LS_KEY, String(u).trim());
+
 export function hasBackend() {
-  return !!GAS_URL;
+  return !!getGasUrl();
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -12,11 +18,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // → retry เมื่อเจอ HTML/เน็ตสะดุด; error ปกติจาก server (เช่น เบิกเกิน) ไม่ retry
 // write ทุกตัว idempotent ฝั่ง server (createSlip ใช้ clientId, import เทียบ key) → retry ปลอดภัย
 export async function callApi(action, data) {
-  if (!GAS_URL) throw new Error('ยังไม่ได้ตั้งค่า GAS_URL ใน config.js');
+  const url = getGasUrl();
+  if (!url) throw new Error('ยังไม่ได้ตั้งค่าที่อยู่เซิร์ฟเวอร์ (GAS URL)');
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(GAS_URL, {
+      const res = await fetch(url, {
         method: 'POST',
         body: JSON.stringify({ action, data: data || {} }),
         redirect: 'follow',
