@@ -15,7 +15,7 @@ var FILE_PREFIX = 'KCE';      // ตัวนำหน้ารหัสแฟ�
 // ตอนออก PDF โค้ดก๊อปเป็นไฟล์ชั่วคราวในไดรฟ์ของสำนักงานเองแล้วลบทิ้ง ต้นฉบับไม่เคยถูกแก้
 // → แก้ฟอร์มที่เดียว ทุกสำนักงานได้ทันที ไม่ต้อง redeploy
 // สำนักงานที่อยากใช้ฟอร์มของตัวเอง: ตั้ง Script Property TEMPLATE_DOC_ID ทับได้
-var TEMPLATE_MASTER_ID = '';
+var TEMPLATE_MASTER_ID = '1cywdRPnlF2N10ImTBkny4WUdM9TjuTzMk2ky3JrkmFA';
 
 var GS_VERSION = '2026-08-05'; // เวอร์ชันโค้ดฝั่ง GAS — โชว์ในแอปไว้เช็คว่า redeploy ตรงกับเว็บหรือยัง
 
