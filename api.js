@@ -25,6 +25,8 @@ export async function callApi(action, data) {
       let j;
       try { j = JSON.parse(text); } catch { throw new Error('__HTML__'); } // ได้ HTML แทน JSON
       if (!j.ok) throw new Error(j.error || 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์');
+      // GAS บางครั้งตีกลับ redirect ของ POST เป็น GET → ได้ผลลัพธ์ doGet ({ok:true} ไม่มี result) → retry
+      if (!('result' in j)) throw new Error('__HTML__');
       return j.result;
     } catch (err) {
       lastErr = err;

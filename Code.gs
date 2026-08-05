@@ -66,11 +66,14 @@ function ensureFileCodes_(sh) {
       if (n > maxNum) maxNum = n;
     }
   }
+  var col = [], dirty = false;
   for (var i = 1; i < v.length; i++) { // รอบสอง: แถวที่ base ยังไม่มีรหัส → กำหนดใหม่, ทั้ง base ใช้รหัสเดียว
     var b = parseWbs_(v[i][1]).base;
     if (!map[b]) map[b] = 'KCE' + pad2_(++maxNum);
-    if (v[i][11] !== map[b]) sh.getRange(i + 1, 12).setValue(map[b]);
+    if (v[i][11] !== map[b]) dirty = true;
+    col.push([map[b]]);
   }
+  if (dirty) sh.getRange(2, 12, col.length, 1).setValues(col); // เขียนทีเดียวทั้งคอลัมน์ — เร็วกว่าทีละเซลล์
   return { map: map, maxNum: maxNum };
 }
 function pad2_(n) { return (n < 10 ? '0' : '') + n; }
@@ -208,11 +211,12 @@ function apiImportBudget_(data) {
 
     var oper = data.oper || ''; // ผู้ดำเนินการ: "กฟภ." หรือชื่อบริษัท
 
-    // เพิ่มคีย์ใหม่
-    cls.toAdd.forEach(function (b) {
-      // นำหน้า act ด้วย ' บังคับ Sheet เก็บเป็น text ไม่ตัด leading zero (คอลัมน์เลขกิจกรรมโชว์ 0020)
-      bTab.sh.appendRow([b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '', wbsTotal, fileCode, oper]);
+    // เพิ่มคีย์ใหม่ — เขียนทีเดียวทุกแถว (appendRow ทีละแถวช้ามากเมื่อไฟล์มีหลายโครงข่าย)
+    // นำหน้า act ด้วย ' บังคับ Sheet เก็บเป็น text ไม่ตัด leading zero (คอลัมน์เลขกิจกรรมโชว์ 0020)
+    var newRows = cls.toAdd.map(function (b) {
+      return [b.key, b.wbs, b.network, b.dept, b.category, "'" + b.act, b.allocation, now, data.fileName || '', data.workName || '', wbsTotal, fileCode, oper];
     });
+    if (newRows.length) bTab.sh.getRange(bTab.sh.getLastRow() + 1, 1, newRows.length, 13).setValues(newRows);
     // WBS เดิม (re-import) → เซ็ตผู้ดำเนินการทุกแถวถ้าส่งค่ามา
     if (oper && wbs) setColForWbs_(bTab.sh, wbs, 13, oper);
 
@@ -424,10 +428,11 @@ function apiEditNetwork_(data) {
 
 // เซ็ตค่าใน 1 คอลัมน์ให้ทุกแถวที่ WBS (คอลัมน์ 2) ตรง — คืนจำนวนแถวที่แก้
 function setColForWbs_(sh, wbs, col, val) {
-  var v = sh.getDataRange().getValues(), n = 0;
+  var v = sh.getDataRange().getValues(), out = [], n = 0;
   for (var i = 1; i < v.length; i++) {
-    if (v[i][1] === wbs) { sh.getRange(i + 1, col).setValue(val); n++; }
+    if (v[i][1] === wbs) { out.push([val]); n++; } else { out.push([v[i][col - 1]]); }
   }
+  if (n) sh.getRange(2, col, out.length, 1).setValues(out); // เขียนทีเดียวทั้งคอลัมน์
   return n;
 }
 
@@ -435,9 +440,8 @@ function updateAllocation_(sh, key, newVal, now, fileName) {
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === key) {
-      sh.getRange(i + 1, 7).setValue(newVal);       // ยอดจัดสรร
-      sh.getRange(i + 1, 8).setValue(now);          // วันที่ import
-      sh.getRange(i + 1, 9).setValue(fileName || '');
+      // ยอดจัดสรร | วันที่ import | ชื่อไฟล์ — เขียนทีเดียว 3 ช่องติดกัน
+      sh.getRange(i + 1, 7, 1, 3).setValues([[newVal, now, fileName || '']]);
       return;
     }
   }

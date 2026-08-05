@@ -1,7 +1,7 @@
 // test_parser.mjs — เทส parser กับไฟล์ ZPSR018 จริง เทียบ Test case A/B
 // รัน: node test_parser.mjs
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { parseZpsr018 } from './parser.js';
 import assert from 'assert';
 
@@ -63,4 +63,28 @@ for (const [name, val, act, open] of expB) {
   assert.strictEqual(c.openSlip, open, `B ${name} เปิดใบ`);
 }
 
-console.log('✅ ผ่านทุกเคส — WBS:', wbs, '| โครงข่าย:', networks.map((n) => n.network).join(', '));
+// --- Case C: WBS แบบ P (ส่วนที่ 2 ไม่ใช่ปี 2 หลัก) ต้องอ่านได้ ---
+// ไฟล์ตัวอย่างเป็นข้อมูลจริง ไม่ได้ push ขึ้น repo → ข้ามเคสนี้ถ้าไม่มีไฟล์
+let pWbs = '(ข้าม — ไม่มีไฟล์)';
+if (existsSync('bug/P-nhe03.1.pdf')) {
+  const dataP = new Uint8Array(readFileSync('bug/P-nhe03.1.pdf'));
+  const docP = await getDocument({ data: dataP }).promise;
+  const itemsP = [];
+  for (let p = 1; p <= docP.numPages; p++) {
+    const tc = await (await docP.getPage(p)).getTextContent();
+    for (const it of tc.items) {
+      if (it.str.trim() === '') continue;
+      itemsP.push({ x: it.transform[4], y: it.transform[5] + p * 100000, s: it.str });
+    }
+  }
+  const P = parseZpsr018(itemsP);
+  assert.strictEqual(P.wbs, 'P-NHE03.1-E-KCECS.9005', 'WBS แบบ P ต้องอ่านได้');
+  assert.strictEqual(P.networks.length, 1, 'P ต้องอ่านได้ 1 โครงข่าย');
+  pWbs = P.wbs;
+}
+// เคสสำรองที่ไม่ต้องพึ่งไฟล์ — regex ต้องรับ WBS ทั้ง 3 format
+for (const w of ['P-NHE03.1-E-KCECS.9005', 'I-69-E-KCE69.M4.1104', 'C-68-E-KCECS.0080.02.2']) {
+  assert.strictEqual(parseZpsr018([{ x: 0, y: 0, s: w }]).wbs, w, `WBS_RE ต้องรับ ${w}`);
+}
+
+console.log('✅ ผ่านทุกเคส — WBS:', wbs, '|', pWbs, '| โครงข่าย:', networks.map((n) => n.network).join(', '));
