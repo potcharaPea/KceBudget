@@ -316,6 +316,18 @@ async function confirmBatchChanges() {
 }
 
 // ================= โหลดข้อมูล + แสดง panel =================
+// หน้าเว็บอัปเดตทันทีที่ push แต่ GAS ต้อง redeploy มือ → มีช่วงที่ server ยังเป็นเวอร์ชันเก่า
+// getAll (คำขอเดียว) เร็วกว่า แต่ถ้า server ยังไม่รู้จัก ให้ถอยไปใช้ 2 คำขอแบบเดิม แทนที่จะพังทั้งแอป
+async function fetchAll() {
+  try {
+    return await callApi('getAll');
+  } catch (err) {
+    if (!/getAll/.test(err.message)) throw err;
+    const [budgets, settings] = await Promise.all([callApi('getBudgets'), callApi('getSettings')]);
+    return { budgets, settings };
+  }
+}
+
 async function loadBudgets() {
   if (!hasBackend()) {
     setSync(false, 'ยังไม่ได้ตั้งค่า GAS_URL');
@@ -324,7 +336,7 @@ async function loadBudgets() {
   }
   setSync(true, 'กำลังโหลด…');
   try {
-    ({ budgets, settings } = await callApi('getAll'));
+    ({ budgets, settings } = await fetchAll());
     setSync(true, 'เชื่อมต่อฐานข้อมูลแล้ว');
     updatePendingBadge();
     renderActivePanel();
