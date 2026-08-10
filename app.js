@@ -2,6 +2,7 @@
 import * as pdfjs from './vendor/pdf.min.mjs';
 import { parseZpsr018 } from './parser.js';
 import { callApi, hasBackend, getGasUrl, setGasUrl } from './api.js';
+import { OFFICES } from './config.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 
@@ -363,9 +364,12 @@ function renderServerSetup() {
   goPanel('files');
   $('filesOut').innerHTML = `<div class="card" style="max-width:640px;margin:24px auto">
     <h3 style="margin:0 0 6px">เชื่อมต่อฐานข้อมูลของสำนักงาน</h3>
-    <div class="sub">วาง URL ของ Google Apps Script web app (ลงท้าย <span class="mono">/exec</span>)
-      ที่ได้จากตอน Deploy — ดูขั้นตอนใน README.md</div>
-    <div class="field" style="margin:14px 0 0">
+    <div class="sub">เลือกสำนักงานของตัวเอง — ระบบจะจำไว้ในเครื่องนี้ ไม่ต้องเลือกอีก</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">${OFFICES.map((o, i) =>
+      `<button class="btn sec office" data-i="${i}">${ic('check')}${esc(o.name)}</button>`).join('')}</div>
+    <div class="sub" style="margin-top:16px">สำนักงานอื่นที่ยังไม่มีในรายชื่อ — วาง URL ของ Google Apps Script
+      web app (ลงท้าย <span class="mono">/exec</span>) ที่ได้จากตอน Deploy เอง ดูขั้นตอนใน README.md</div>
+    <div class="field" style="margin:10px 0 0">
       <input id="gasUrlIn" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(getGasUrl())}">
     </div>
     <div id="gasUrlErr" class="err"></div>
@@ -397,6 +401,10 @@ function renderServerSetup() {
         `<div class="ok">${ic('check')}เปลี่ยนรหัสนำหน้าเป็น ${esc(r.prefix)} แล้ว — แก้ ${r.changed} แถว</div>`);
     } catch (err) { $('prefixErr').textContent = err.message; pb.disabled = false; }
   });
+  document.querySelectorAll('.office').forEach((b) => b.addEventListener('click', () => {
+    setGasUrl(OFFICES[+b.dataset.i].url);
+    loadBudgets();
+  }));
   $('gasUrlSave').addEventListener('click', () => {
     const u = $('gasUrlIn').value.trim();
     if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(u)) {
