@@ -806,6 +806,7 @@ function renderDetail() {
     <div style="flex:1">
       <div class="dh-kicker">${isC ? 'หมายเลขงานหลัก (WBS base)' : 'หมายเลขงาน (WBS)'}</div>
       <div class="dh-title">${esc(file.base)}</div>
+      ${file.workName ? `<div class="dh-name">${esc(file.workName)}</div>` : ''}
       <div class="chips">${file.fileCode ? `<span class="chip">รหัสแฟ้ม ${esc(file.fileCode)}</span>` : ''}<span class="chip">งบ ${esc(file.type)}</span><span class="chip">${nodes.length} โหนด</span></div>
     </div>
     <div class="gauge" style="--pct:${pct.toFixed(1)};--gc:var(--primary)">
