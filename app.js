@@ -433,10 +433,11 @@ function setSync(ok, txt) {
 function jobStats() {
   const jobs = {};
   budgets.forEach((b) => {
-    const j = jobs[b.wbs] || (jobs[b.wbs] = { wbs: b.wbs, fileCode: '', node: extractNode(b.wbs), oper: '', cats: 0, alloc: 0, paid: 0, bal: 0, nets: new Set(), created: null, wbsTotal: null });
+    const j = jobs[b.wbs] || (jobs[b.wbs] = { wbs: b.wbs, fileCode: '', node: extractNode(b.wbs), oper: '', workName: '', cats: 0, alloc: 0, paid: 0, bal: 0, nets: new Set(), created: null, wbsTotal: null });
     j.cats++; j.alloc += b.allocation; j.paid += b.paid; j.bal += b.balance; j.nets.add(b.network);
     if (b.fileCode && !j.fileCode) j.fileCode = b.fileCode; // รหัสแฟ้ม (เท่ากันทุกแถวของ WBS)
     if (b.oper && !j.oper) j.oper = b.oper; // ผู้ดำเนินการ (เท่ากันทุกแถวของ WBS)
+    if (b.workName && !j.workName) j.workName = b.workName; // ชื่องานที่ตั้งตอน import
     if (b.wbsTotal != null && j.wbsTotal == null) j.wbsTotal = b.wbsTotal; // ยอดจัดสรรรวมทั้งงาน (เท่ากันทุกแถวของ WBS)
     const d = b.imported ? new Date(b.imported) : null; // วันที่สร้างแฟ้ม = import ครั้งแรกสุด
     if (d && !isNaN(d) && (!j.created || d < j.created)) j.created = d;
@@ -449,10 +450,11 @@ function fileStats() {
   const files = {};
   jobStats().forEach((j) => {
     const w = parseWbs(j.wbs);
-    const f = files[w.base] || (files[w.base] = { base: w.base, fileCode: '', oper: '', type: w.base.charAt(0), nodes: [], created: null });
+    const f = files[w.base] || (files[w.base] = { base: w.base, fileCode: '', oper: '', workName: '', type: w.base.charAt(0), nodes: [], created: null });
     f.nodes.push(j);
     if (j.fileCode && !f.fileCode) f.fileCode = j.fileCode;
     if (j.oper && !f.oper) f.oper = j.oper;
+    if (j.workName && !f.workName) f.workName = j.workName;
     if (j.created && (!f.created || j.created < f.created)) f.created = j.created;
   });
   const vals = Object.values(files);
@@ -499,6 +501,7 @@ function fileCard(f) {
   return `<div class="filecard" data-file>
     <div class="fc-top"><span class="fc-wbs">${esc(f.fileCode)} — ${esc(f.base)}</span>
       <span class="fc-badge ${st}">${STATUS_LABEL[st]}</span></div>
+    ${f.workName ? `<div class="fc-name">${esc(f.workName)}</div>` : ''}
     <div class="fc-pills">${typeLabel ? `<span class="fc-pill">${typeLabel}</span>` : ''}${f.oper ? `<span class="fc-pill">${esc(f.oper)}</span>` : ''}</div>
     ${tabs}${panels}</div>`;
 }
@@ -525,7 +528,7 @@ function updatePendingBadge() {
 
 // ---------- หน้า: เลือกแฟ้มงาน (จัดกลุ่มตามวันที่สร้าง) ----------
 function renderFiles() {
-  const jobs = fileStats().filter((f) => (f.base + ' ' + f.fileCode).toLowerCase().includes(search));
+  const jobs = fileStats().filter((f) => (f.base + ' ' + f.fileCode + ' ' + f.workName).toLowerCase().includes(search));
   if (!jobs.length) {
     $('filesOut').innerHTML = `<div class="list-empty">${budgets.length ? 'ไม่พบแฟ้มที่ค้นหา' : 'ยังไม่มีแฟ้ม — กด “นำเข้าไฟล์ ZPSR018” เพื่อเพิ่มแฟ้มแรก'}</div>`;
     return;
