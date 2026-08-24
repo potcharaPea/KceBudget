@@ -17,7 +17,7 @@ var FILE_PREFIX = 'KCE';      // ตัวนำหน้ารหัสแฟ�
 // สำนักงานที่อยากใช้ฟอร์มของตัวเอง: ตั้ง Script Property TEMPLATE_DOC_ID ทับได้
 var TEMPLATE_MASTER_ID = '1cywdRPnlF2N10ImTBkny4WUdM9TjuTzMk2ky3JrkmFA';
 
-var GS_VERSION = '2026-08-05'; // เวอร์ชันโค้ดฝั่ง GAS — โชว์ในแอปไว้เช็คว่า redeploy ตรงกับเว็บหรือยัง
+var GS_VERSION = '2026-08-24'; // เวอร์ชันโค้ดฝั่ง GAS — โชว์ในแอปไว้เช็คว่า redeploy ตรงกับเว็บหรือยัง
 
 var PROP = PropertiesService.getScriptProperties();
 var SHEET_ID_KEY = 'SHEET_ID';
@@ -152,13 +152,14 @@ function parseWbs_(wbs) {
 // backfill แถวที่ยังไม่มีรหัสตามลำดับแถว → คืน { map:{base:code}, maxNum }
 function ensureFileCodes_(sh) {
   var v = sh.getDataRange().getValues();
-  var map = {}, maxNum = 0;
+  var map = {}, used = {}, maxNum = 0;
   for (var i = 1; i < v.length; i++) { // รอบแรก: เก็บรหัสที่มี (base แรกที่เจอชนะ) + หาเลขสูงสุด
     var code = v[i][11];
     if (code) {
       var base = parseWbs_(v[i][1]).base;
-      if (!map[base]) map[base] = code;
-      var n = Number(String(code).replace(/D/g, '')); // ดึงเฉพาะเลขรัน ไม่ยึดความยาว prefix
+      // รหัสซ้ำข้ามแฟ้ม (ตกค้างจากบั๊กเลขรัน) → ไม่รับไว้ ปล่อยให้รอบสองรันเลขใหม่ให้ แฟ้มที่ import ก่อนได้รหัสเดิม
+      if (!map[base] && !used[code]) { map[base] = code; used[code] = true; }
+      var n = Number(String(code).replace(/\D/g, '')); // ดึงเฉพาะเลขรัน ไม่ยึดความยาว prefix
       if (n > maxNum) maxNum = n;
     }
   }
