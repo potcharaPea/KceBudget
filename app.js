@@ -1,8 +1,8 @@
 // app.js — Phase 2: นำเข้า ZPSR018 → คุมงบ → เปิดใบตัด (ยังไม่ออก PDF)
 import * as pdfjs from './vendor/pdf.min.mjs';
 import { parseZpsr018 } from './parser.js';
-import { callApi, hasBackend, getGasUrl, setGasUrl } from './api.js';
-import { OFFICES } from './config.js';
+import { callApi, hasBackend, getOffice, setOffice, listOffices, addOffice } from './api.js';
+import { prepareSlip, printSlip } from './slip.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 
@@ -95,7 +95,7 @@ $('credit').addEventListener('click', () => {
   $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
     ${dev('นายพชระ ปรีดากรณ์', 'วศก.ผปร. กฟส.คช.')}
     ${dev('นายภัคพล คนซื่อ', 'พชง.ผปร. กฟส.คช.')}
-    <div class="sub" style="text-align:center;margin-top:8px">เวอร์ชันเซิร์ฟเวอร์ (GAS): ${esc(gsVersion)}</div>
+    <div class="sub" style="text-align:center;margin-top:8px">ฐานข้อมูล: ${esc(gsVersion)}</div>
     <div class="modal-actions" style="justify-content:center"><button class="btn" id="creditClose">ปิด</button></div>`;
   $('modal').classList.add('show');
   $('creditClose').addEventListener('click', closeModal);
@@ -348,7 +348,7 @@ async function loadBudgets() {
   } catch (err) {
     setSync(false, 'เชื่อมต่อไม่สำเร็จ');
     $('filesOut').innerHTML = `<div class="list-empty err">โหลดไม่สำเร็จ: ${esc(err.message)}
-      <div style="margin-top:12px"><button class="btn sec" id="reSetup">ตั้งค่าที่อยู่เซิร์ฟเวอร์</button></div></div>`;
+      <div style="margin-top:12px"><button class="btn sec" id="reSetup">เลือกสำนักงาน</button></div></div>`;
     $('reSetup').addEventListener('click', renderServerSetup);
   }
 }
@@ -358,22 +358,31 @@ function setOfficeName(office) {
   document.title = `PEA Budget ${office}`;
 }
 
-// หน้าตั้งค่าครั้งแรก — หน้าเว็บตัวเดียวใช้ได้ทุกสำนักงาน แต่ละที่ชี้ไป GAS ของตัวเอง
-function renderServerSetup() {
-  if (!hasBackend()) setSync(false, 'ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์'); // เปิดจาก sidebar ตอนต่อติดอยู่ อย่าไปทับสถานะ
+// หน้าเลือกสำนักงาน — ฐานข้อมูลเดียว แยกข้อมูลด้วยรหัสสำนักงาน · เพิ่มการไฟฟ้าใหม่ได้จากตรงนี้
+async function renderServerSetup() {
+  if (!hasBackend()) setSync(false, 'ยังไม่ได้เลือกสำนักงาน'); // เปิดจาก sidebar ตอนต่อติดอยู่ อย่าไปทับสถานะ
   goPanel('files');
+  $('filesOut').innerHTML = `<div class="list-empty">${spin}กำลังโหลดรายชื่อสำนักงาน…</div>`;
+  let offices;
+  try { offices = await listOffices(); }
+  catch (err) { $('filesOut').innerHTML = `<div class="list-empty err">โหลดรายชื่อสำนักงานไม่สำเร็จ: ${esc(err.message)}</div>`; return; }
+  const cur = getOffice();
   $('filesOut').innerHTML = `<div class="card" style="max-width:640px;margin:24px auto">
-    <h3 style="margin:0 0 6px">เชื่อมต่อฐานข้อมูลของสำนักงาน</h3>
+    <h3 style="margin:0 0 6px">เลือกสำนักงาน</h3>
     <div class="sub">เลือกสำนักงานของตัวเอง — ระบบจะจำไว้ในเครื่องนี้ ไม่ต้องเลือกอีก</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">${OFFICES.map((o, i) =>
-      `<button class="btn sec office" data-i="${i}">${ic('check')}${esc(o.name)}</button>`).join('')}</div>
-    <div class="sub" style="margin-top:16px">สำนักงานอื่นที่ยังไม่มีในรายชื่อ — วาง URL ของ Google Apps Script
-      web app (ลงท้าย <span class="mono">/exec</span>) ที่ได้จากตอน Deploy เอง ดูขั้นตอนใน README.md</div>
-    <div class="field" style="margin:10px 0 0">
-      <input id="gasUrlIn" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(getGasUrl())}">
-    </div>
-    <div id="gasUrlErr" class="err"></div>
-    <div style="margin-top:12px"><button class="btn" id="gasUrlSave">${ic('check')}บันทึกแล้วเชื่อมต่อ</button></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">${offices.map((o) =>
+      `<button class="btn ${o.id === cur ? '' : 'sec'} office" data-id="${esc(o.id)}">${ic('check')}${esc(o.name)}
+        <span class="mono" style="opacity:.7">${esc(o.file_prefix)}</span></button>`).join('')}</div>
+  </div>
+  <div class="card" style="max-width:640px;margin:16px auto">
+    <h3 style="margin:0 0 6px">เพิ่มการไฟฟ้าใหม่</h3>
+    <div class="sub">ยังไม่มีในรายชื่อ — เพิ่มได้เลย ข้อมูลของแต่ละสำนักงานแยกกัน ไม่ปนกัน</div>
+    <div class="field" style="margin:10px 0 0"><label>ชื่อสำนักงาน</label>
+      <input id="newOfName" placeholder="เช่น กฟส.มุกดาหาร"></div>
+    <div class="field" style="margin:10px 0 0"><label>ตัวย่อรหัสแฟ้ม (A-Z/0-9, 2-5 ตัว — ห้ามซ้ำสำนักงานอื่น)</label>
+      <input id="newOfPrefix" placeholder="เช่น MDH" maxlength="5" style="text-transform:uppercase"></div>
+    <div id="newOfErr" class="err"></div>
+    <div style="margin-top:12px"><button class="btn" id="newOfSave">${ic('check')}เพิ่มแล้วเข้าใช้งาน</button></div>
   </div>
   ${filePrefix ? `<div class="card" style="max-width:640px;margin:16px auto">
     <h3 style="margin:0 0 6px">รหัสนำหน้าแฟ้ม</h3>
@@ -402,16 +411,19 @@ function renderServerSetup() {
     } catch (err) { $('prefixErr').textContent = err.message; pb.disabled = false; }
   });
   document.querySelectorAll('.office').forEach((b) => b.addEventListener('click', () => {
-    setGasUrl(OFFICES[+b.dataset.i].url);
+    setOffice(b.dataset.id);
     loadBudgets();
   }));
-  $('gasUrlSave').addEventListener('click', () => {
-    const u = $('gasUrlIn').value.trim();
-    if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(u)) {
-      $('gasUrlErr').textContent = 'URL ต้องเป็นของ script.google.com และลงท้ายด้วย /exec'; return;
-    }
-    setGasUrl(u);
-    loadBudgets();
+  $('newOfSave').addEventListener('click', async () => {
+    const name = $('newOfName').value.trim(), p = $('newOfPrefix').value.trim().toUpperCase();
+    if (!name) { $('newOfErr').textContent = 'ยังไม่ได้ใส่ชื่อสำนักงาน'; return; }
+    if (!/^[A-Z0-9]{2,5}$/.test(p)) { $('newOfErr').textContent = 'ตัวย่อต้องเป็น A-Z หรือ 0-9 ยาว 2-5 ตัว'; return; }
+    const btn = $('newOfSave'); btn.disabled = true; $('newOfErr').textContent = '';
+    try {
+      const o = await addOffice(name, p);
+      setOffice(o.id);
+      loadBudgets();
+    } catch (err) { $('newOfErr').textContent = err.message; btn.disabled = false; }
   });
 }
 
@@ -1250,47 +1262,26 @@ async function doDeleteSlip(slipNo, b) {
 async function makePdf(btn) {
   btn.disabled = true; btn.innerHTML = spin + 'กำลังออก…';
   try {
-    const r = await callApi('makePdf', { slipNo: btn.dataset.pdf });
-    const bytes = Uint8Array.from(atob(r.b64), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    const file = new File([blob], r.filename, { type: 'application/pdf' });
-    // มือถือ (touch): เด้ง modal ให้กดแชร์/เปิดเอง — iOS ต้องการ user gesture สดๆ ไม่งั้น share ถูกบล็อก
+    const doc = await callApi('makePdf', { slipNo: btn.dataset.pdf });
+    await prepareSlip(doc);
+    // มือถือ (touch): เด้ง modal ให้กดพิมพ์เอง — iOS บล็อก print ที่ไม่ได้มาจากการกดสดๆ (หลัง await)
     if (matchMedia('(pointer: coarse)').matches) {
-      showPdfResult(blob, file);
+      $('modalBox').innerHTML = `<h3>${ic('check')}ใบตัดงบพร้อมแล้ว</h3>
+        <div class="sub">${esc(doc.filename)}</div>
+        <div class="sub" style="margin-top:8px">กดพิมพ์ แล้วเลือก "บันทึกเป็น PDF" หรือแชร์จากหน้าตัวอย่างก่อนพิมพ์</div>
+        <div style="margin-top:18px"><button class="btn block" id="pdfPrint">${ic('download')}พิมพ์ / บันทึก PDF</button></div>
+        <div class="modal-actions"><button class="btn sec" id="pdfClose">ปิด</button></div>`;
+      $('modal').classList.add('show');
+      $('pdfPrint').addEventListener('click', () => printSlip(doc));
+      $('pdfClose').addEventListener('click', closeModal);
     } else {
-      downloadBlob(blob, r.filename); // เดสก์ท็อป: ดาวน์โหลดตรง
+      printSlip(doc); // เดสก์ท็อป: เปิดหน้าต่างพิมพ์เลย
     }
   } catch (err) {
     alert('ออก PDF ไม่สำเร็จ: ' + err.message);
   } finally {
     btn.disabled = false; btn.innerHTML = ic('download') + 'ออก PDF';
   }
-}
-
-// modal ผลลัพธ์ PDF (มือถือ) — ปุ่มแชร์เป็น gesture ใหม่ (iOS-safe) + ลิงก์เปิดดู
-function showPdfResult(blob, file) {
-  const url = URL.createObjectURL(blob);
-  const canShare = navigator.canShare && navigator.canShare({ files: [file] });
-  $('modalBox').innerHTML = `<h3>${ic('check')}ออกใบตัดงบเรียบร้อย</h3>
-    <div class="sub">${esc(file.name)}</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
-      ${canShare ? `<button class="btn block" id="pdfShare">${ic('upload')}แชร์ / บันทึกลงเครื่อง</button>` : ''}
-      <a class="btn ${canShare ? 'sec ' : ''}block" href="${url}" target="_blank" rel="noopener" style="text-decoration:none">${ic('download')}เปิดดู PDF (แล้วกดแชร์/บันทึก)</a>
-    </div>
-    <div class="modal-actions"><button class="btn sec" id="pdfClose">ปิด</button></div>`;
-  $('modal').classList.add('show');
-  $('pdfClose').addEventListener('click', () => { setTimeout(() => URL.revokeObjectURL(url), 3000); closeModal(); });
-  if (canShare) $('pdfShare').addEventListener('click', async () => {
-    try { await navigator.share({ files: [file], title: file.name }); }
-    catch (e) { if (e.name !== 'AbortError') alert('แชร์ไม่สำเร็จ — ลองปุ่ม "เปิดดู PDF" แล้วกดแชร์จากตัวอ่าน PDF: ' + e.message); }
-  });
-}
-
-function downloadBlob(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 // ---------- ฟอร์มเปิดใบตัด (modal) ----------
