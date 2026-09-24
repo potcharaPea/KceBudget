@@ -19,8 +19,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  // GAS backend ต้อง online เสมอ — อย่าแตะ/อย่า cache
-  if (url.hostname.includes('script.google.com')) return;
+  // Supabase / Google Fonts เป็นคนละ origin → ไม่แตะ (ข้อมูลต้องสดเสมอ)
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // network-first: ออนไลน์ = ได้โค้ดใหม่เสมอ (กันเสิร์ฟ app.js เก่าค้าง), ออฟไลน์ = fallback cache
   e.respondWith(
