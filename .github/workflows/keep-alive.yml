@@ -11,7 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: KCE Budget
-        run: curl -fsS "https://ufosqepftnixsshsdajg.supabase.co/rest/v1/offices?select=name&limit=1" -H "apikey: sb_publishable_qMa5JuIFY-vqPA-Ss54a8w_wLnZWPTJ"
+        run: |
+          curl -fsS "https://ufosqepftnixsshsdajg.supabase.co/rest/v1/offices?select=name&limit=1" -H "apikey: sb_publishable_qMa5JuIFY-vqPA-Ss54a8w_wLnZWPTJ"
       - name: PEA Tree Trimming
         if: always()
-        run: curl -fsS "https://nwowvwadxdsidazolljk.supabase.co/rest/v1/offices?select=id&limit=1" -H "apikey: sb_publishable_2wpHTWLsPuswlj_mSnmfFQ_FZ89xplf" -H "Authorization: Bearer sb_publishable_2wpHTWLsPuswlj_mSnmfFQ_FZ89xplf"
+        run: |
+          curl -fsS "https://nwowvwadxdsidazolljk.supabase.co/rest/v1/offices?select=id&limit=1" -H "apikey: sb_publishable_2wpHTWLsPuswlj_mSnmfFQ_FZ89xplf" -H "Authorization: Bearer sb_publishable_2wpHTWLsPuswlj_mSnmfFQ_FZ89xplf"
