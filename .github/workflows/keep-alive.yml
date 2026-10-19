@@ -1,0 +1,17 @@
+# กัน Supabase Free หยุดโปรเจกต์เมื่อไม่มีคนใช้ 7 วัน → อ่านข้อมูล 1 แถวทุก 3 วัน
+# ponytail: คีย์ publishable เป็นคีย์สาธารณะที่อยู่ในหน้าเว็บอยู่แล้ว ไม่ต้องใช้ secrets
+# ⚠ GitHub ปิด schedule เองถ้า repo ไม่มี commit 60 วัน → เข้า Actions กด Enable workflow
+name: keep-alive
+on:
+  schedule:
+    - cron: '0 1 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: KCE Budget
+        run: curl -fsS "https://ufosqepftnixsshsdajg.supabase.co/rest/v1/offices?select=name&limit=1" -H "apikey: sb_publishable_qMa5JuIFY-vqPA-Ss54a8w_wLnZWPTJ"
+      - name: PEA Tree Trimming
+        if: always()
+        run: curl -fsS "https://nwowvwadxdsidazolljk.supabase.co/rest/v1/offices?select=id&limit=1" -H "apikey: sb_publishable_2wpHTWLsPuswlj_mSnmfFQ_FZ89xplf" -H "Authorization: Bearer sb_publishable_2wpHTWLsPuswlj_mSnmfFQ_FZ89xplf"
