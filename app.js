@@ -87,16 +87,31 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').ca
 
 // เครดิตผู้พัฒนา — กดแล้วเด้ง modal
 $('credit').addEventListener('click', () => {
-  const dev = (name, role) => `<div style="text-align:center;padding:10px 0">
-      <div style="color:var(--primary)"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></div>
-      <div style="font-size:18px;font-weight:600;margin-top:8px">${name}</div>
-      <div class="sub" style="margin-top:4px">${role}</div>
+  const dev = (name, role, delay) => `<div class="cr-dev" style="--d:${delay}s">
+      <div class="cr-avatar"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle pathLength="100" cx="12" cy="8" r="4"/><path pathLength="100" d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></div>
+      <div class="cr-name">${name}</div>
+      <div class="sub">${role}</div>
     </div>`;
-  $('modalBox').innerHTML = `<h3 style="text-align:center">ผู้พัฒนา</h3>
-    ${dev('นายพชระ ปรีดากรณ์', 'วศก.ผปร. กฟส.คช.')}
-    ${dev('นายภัคพล คนซื่อ', 'พชง.ผปร. กฟส.คช.')}
-    <div class="sub" style="text-align:center;margin-top:8px">ฐานข้อมูล: ${esc(gsVersion)}</div>
-    <div class="modal-actions" style="justify-content:center"><button class="btn" id="creditClose">ปิด</button></div>`;
+  // ประกายทองแตกออกรอบหัวข้อ — สุ่มทิศ/ระยะใหม่ทุกครั้งที่เปิด
+  const sparks = Array.from({ length: 22 }, (_, i) => {
+    const a = (i / 22) * Math.PI * 2, r = 90 + Math.random() * 130;
+    return `<i class="cr-spark" style="--x:${(Math.cos(a) * r).toFixed(0)}px;--y:${(Math.sin(a) * r).toFixed(0)}px;--s:${(0.6 + Math.random()).toFixed(2)};animation-delay:${(Math.random() * 0.25).toFixed(2)}s"></i>`;
+  }).join('');
+  $('modalBox').innerHTML = `<div class="credit">
+    <div class="cr-sparks" aria-hidden="true">${sparks}</div>
+    <div class="cr-kicker">PEA Budget</div>
+    <h3 class="cr-title">ผู้พัฒนา</h3>
+    <div class="cr-team">
+      <svg class="cr-wire" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cr-wire-line" pathLength="100" d="M0 6Q100 44 200 6"/>
+        <path class="cr-wire-pulse" pathLength="100" d="M0 6Q100 44 200 6"/>
+      </svg>
+      ${dev('นายพชระ ปรีดากรณ์', 'วศก.ผปร. กฟส.คช.', 0.25)}
+      ${dev('นายภัคพล คนซื่อ', 'พชง.ผปร. กฟส.คช.', 0.45)}
+    </div>
+    <div class="sub cr-foot">ฐานข้อมูล: ${esc(gsVersion)}</div>
+    <div class="modal-actions cr-foot"><button class="btn" id="creditClose">ปิด</button></div>
+  </div>`;
   $('modal').classList.add('show');
   $('creditClose').addEventListener('click', closeModal);
 });

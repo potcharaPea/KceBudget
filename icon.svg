@@ -1,18 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#ffffff"/>
-  <g fill="#222222">
-    <rect x="146" y="240" width="36" height="100" rx="7"/>
-    <rect x="198" y="196" width="36" height="144" rx="7"/>
-    <rect x="250" y="150" width="36" height="190" rx="7"/>
-    <rect x="302" y="256" width="36" height="84" rx="7" opacity="0.3"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#351655"/><stop offset="1" stop-color="#170a2b"/></linearGradient>
+    <linearGradient id="au" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".5" stop-color="#f5b921"/><stop offset="1" stop-color="#d98a0b"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- หมวกนิรภัย = งานก่อสร้าง -->
+  <path d="M136 204a120 120 0 0 1 240 0z" fill="url(#au)"/>
+  <rect x="234" y="66" width="44" height="84" rx="12" fill="#d98a0b"/>
+  <rect x="100" y="198" width="312" height="30" rx="15" fill="url(#au)"/>
+  <!-- ใบตัดงบ + เส้นปรุ + เครื่องหมายบาท -->
+  <rect x="100" y="250" width="312" height="178" rx="18" fill="#fff8e6"/>
+  <path d="M312 262V336" fill="none" stroke="#351655" stroke-width="7" stroke-dasharray="14 12" stroke-linecap="round"/>
+  <g transform="translate(-14 0)" fill="none" stroke="#351655" stroke-width="17" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M172 296h40a22 22 0 0 1 0 44h-40M172 340h46a24 24 0 0 1 0 48h-46M172 296v92M196 276v132"/>
   </g>
-  <path d="M136 245 L346 152" fill="none" stroke="#ff385c" stroke-width="4" stroke-dasharray="9 7"/>
-  <g transform="translate(320,168) rotate(24)">
-    <circle cx="0" cy="0" r="11" fill="none" stroke="#ff385c" stroke-width="6"/>
-    <circle cx="0" cy="34" r="11" fill="none" stroke="#ff385c" stroke-width="6"/>
-    <line x1="7" y1="7" x2="58" y2="58" stroke="#ff385c" stroke-width="6" stroke-linecap="round"/>
-    <line x1="7" y1="27" x2="58" y2="-24" stroke="#ff385c" stroke-width="6" stroke-linecap="round"/>
+  <!-- กรรไกร = ตัดงบ -->
+  <g fill="none" stroke="#d9304a" stroke-width="13" stroke-linecap="round">
+    <path d="M292 428 326 340M332 428 298 340"/>
+    <circle cx="282" cy="452" r="21"/>
+    <circle cx="342" cy="452" r="21"/>
   </g>
-  <rect x="192" y="382" width="128" height="46" rx="23" fill="#ff385c"/>
-  <text x="256" y="414" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="34" letter-spacing="3" fill="#ffffff">KCE</text>
 </svg>
